@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Codex Charlotte Weather Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+<script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+<style>
+  :root {
+    --bg: #0b1016;
+    --panel: #121a22;
+    --panel-2: #17212b;
+    --ink: #edf3f8;
+    --muted: #91a2b4;
+    --line: #263443;
+    --blue: #4f8cff;
+    --teal: #25c2a0;
+    --gold: #f3b34c;
+    --coral: #ff6b6b;
+    --violet: #a78bfa;
+    --snow: #b9e6ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { min-height: 100%; background: var(--bg); color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+  body {
+    background:
+      linear-gradient(180deg, rgba(79,140,255,.08), transparent 380px),
+      linear-gradient(90deg, rgba(37,194,160,.04), transparent 40%, rgba(255,107,107,.04)),
+      var(--bg);
+  }
+  .app-shell { display: grid; grid-template-columns: 318px minmax(0, 1fr); gap: 18px; padding: 18px; }
+  .panel { background: rgba(18,26,34,.94); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 20px 50px rgba(0,0,0,.28); }
+  .panel-soft { background: rgba(23,33,43,.72); border: 1px solid rgba(145,162,180,.18); border-radius: 8px; }
+  .sidebar { position: sticky; top: 18px; max-height: calc(100vh - 36px); overflow: auto; }
+  .sidebar::-webkit-scrollbar, .table-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+  .sidebar::-webkit-scrollbar-thumb, .table-scroll::-webkit-scrollbar-thumb { background: #314151; border-radius: 8px; }
+  .eyebrow { color: var(--teal); font-size: 11px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+  .metric { background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.012)); border: 1px solid var(--line); border-radius: 8px; padding: 15px; min-height: 116px; }
+  .metric-label { color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+  .metric-value { font-size: clamp(24px, 3vw, 36px); font-weight: 800; line-height: 1.05; margin-top: 12px; letter-spacing: 0; }
+  .metric-sub { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .chart-card { padding: 16px; min-height: 360px; }
+  .chart-title { display: flex; justify-content: space-between; gap: 12px; align-items: start; margin-bottom: 12px; }
+  .chart-title h3 { font-size: 15px; font-weight: 800; color: #fff; }
+  .chart-title p { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .tab { border: 1px solid transparent; color: var(--muted); border-radius: 8px; padding: 9px 13px; font-weight: 800; font-size: 13px; transition: .15s ease; }
+  .tab:hover { color: var(--ink); background: rgba(255,255,255,.04); }
+  .tab-active { color: #071015; background: var(--teal); border-color: rgba(255,255,255,.12); }
+  .chip, .select-chip { border: 1px solid var(--line); background: #0e151c; color: #c7d3df; border-radius: 999px; padding: 7px 10px; font-size: 12px; font-weight: 700; transition: .15s ease; }
+  .chip:hover, .select-chip:hover { border-color: rgba(79,140,255,.75); color: white; }
+  .chip-on { background: rgba(37,194,160,.16); color: #dffdf5; border-color: rgba(37,194,160,.62); }
+  .chip-off { opacity: .34; cursor: not-allowed; }
+  .field-label { display: flex; justify-content: space-between; gap: 10px; color: #cbd7e3; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 9px; }
+  input[type="range"] { width: 100%; accent-color: var(--teal); }
+  select, input[type="number"] { width: 100%; background: #0e151c; border: 1px solid var(--line); color: var(--ink); border-radius: 8px; padding: 9px 10px; font-size: 13px; }
+  .filter-block { border-top: 1px solid rgba(145,162,180,.14); padding-top: 14px; margin-top: 14px; }
+  .recharts-cartesian-axis-tick-value { fill: #91a2b4; font-size: 11px; }
+  .recharts-legend-item-text { color: #cbd7e3 !important; }
+  .tooltip-box { background: #0b1016; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; box-shadow: 0 14px 36px rgba(0,0,0,.35); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { color: #9fb1c1; text-align: left; text-transform: uppercase; letter-spacing: .08em; font-size: 11px; font-weight: 800; background: #101820; position: sticky; top: 0; z-index: 1; }
+  th, td { border-bottom: 1px solid var(--line); padding: 10px 11px; white-space: nowrap; }
+  tbody tr:hover { background: rgba(79,140,255,.07); }
+  .alert { border: 1px solid rgba(255,107,107,.48); background: linear-gradient(90deg, rgba(255,107,107,.16), rgba(243,179,76,.08)); border-radius: 8px; }
+  .mode-btn { border: 1px solid var(--line); color: var(--muted); padding: 7px 10px; font-size: 12px; font-weight: 800; }
+  .mode-btn:first-child { border-radius: 8px 0 0 8px; }
+  .mode-btn:last-child { border-radius: 0 8px 8px 0; }
+  .mode-on { background: var(--blue); color: white; border-color: var(--blue); }
+  @media (max-width: 1100px) { .app-shell { grid-template-columns: 1fr; } .sidebar { position: relative; top: 0; max-height: none; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="env,react">
+const { useEffect, useMemo, useRef, useState } = React;
+const {
+  ResponsiveContainer, LineChart, Line, AreaChart, Area, BarChart, Bar, ScatterChart, Scatter,
+  XAxis, YAxis, ZAxis, CartesianGrid, Tooltip, Legend
+} = Recharts;
+
+const COLORS = {
+  blue: '#4f8cff', teal: '#25c2a0', gold: '#f3b34c', coral: '#ff6b6b',
+  violet: '#a78bfa', snow: '#b9e6ff', grid: '#263443', muted: '#91a2b4'
+};
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const SEASONS = ['Winter','Spring','Summer','Fall'];
+const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const ERA_OPTIONS = ['All','Pre-1980','1980-1999','2000-2019','2020-Present'];
+const PERIODS = ['Day','Month','Quarter','Year'];
+
+function seasonOf(month) {
+  if (month === 12 || month <= 2) return 'Winter';
+  if (month <= 5) return 'Spring';
+  if (month <= 8) return 'Summer';
+  return 'Fall';
+}
+function decadeOf(year) { return Math.floor(year / 10) * 10; }
+function eraOf(year) {
+  if (year < 1980) return 'Pre-1980';
+  if (year < 2000) return '1980-1999';
+  if (year < 2020) return '2000-2019';
+  return '2020-Present';
+}
+function precipType(row) {
+  if (row.prcp <= 0 && row.snow <= 0) return 'Dry';
+  if (row.snow > 0 && row.prcp > 0) return 'Mixed';
+  if (row.snow > 0) return 'Snow';
+  return 'Rain';
+}
+function precipBucket(v) {
+  if (v <= 0) return 'None';
+  if (v < 0.1) return 'Trace';
+  if (v < 0.5) return 'Light';
+  if (v < 1.0) return 'Moderate';
+  return 'Heavy';
+}
+function tempBucket(v) {
+  if (v < 32) return 'Freezing';
+  if (v < 60) return 'Cool';
+  if (v < 80) return 'Mild';
+  if (v < 95) return 'Hot';
+  return 'Extreme';
+}
+function snowBucket(v) {
+  if (v <= 0) return 'No Snow';
+  if (v < 1) return 'Dusting';
+  if (v < 3) return 'Measurable';
+  return 'Storm';
+}
+function isWeekend(dow) { return dow === 0 || dow === 6; }
+function fmt(n, digits = 1) {
+  if (n == null || Number.isNaN(Number(n))) return '-';
+  return Number(n).toFixed(digits);
+}
+function pct(n, digits = 0) { return `${fmt(n, digits)}%`; }
+function sum(arr, key) { return arr.reduce((acc, d) => acc + (Number(d[key]) || 0), 0); }
+function avg(arr, key) { return arr.length ? sum(arr, key) / arr.length : 0; }
+function maxBy(arr, key) { return arr.length ? arr.reduce((best, d) => !best || d[key] > best[key] ? d : best, null) : null; }
+function minBy(arr, key) { return arr.length ? arr.reduce((best, d) => !best || d[key] < best[key] ? d : best, null) : null; }
+function groupBy(arr, fn) {
+  const map = new Map();
+  arr.forEach(d => {
+    const k = fn(d);
+    if (!map.has(k)) map.set(k, []);
+    map.get(k).push(d);
+  });
+  return map;
+}
+function movingSum(rows, months = 12) {
+  const out = [];
+  for (let i = 0; i < rows.length; i++) {
+    const slice = rows.slice(Math.max(0, i - months + 1), i + 1);
+    out.push({ ...rows[i], rolling: sum(slice, 'prcp') });
+  }
+  return out;
+}
+
+function prepareRows(raw) {
+  return raw.map((d, idx) => {
+    const date = new Date(d.date + 'T00:00:00');
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const tmax = Number(d.tmax ?? 0);
+    const tmin = Number(d.tmin ?? 0);
+    const tavg = d.tavg == null ? (tmax + tmin) / 2 : Number(d.tavg);
+    const prcp = Number(d.prcp ?? 0);
+    const snow = Number(d.snow ?? 0);
+    return {
+      ...d, idx, dateObj: date, year, month, monthName: MONTHS[month - 1],
+      quarter: Math.ceil(month / 3), dow: date.getDay(), dayName: DAYS[date.getDay()],
+      season: seasonOf(month), decade: decadeOf(year), era: eraOf(year),
+      tmax, tmin, tavg, prcp, snow, snwd: Number(d.snwd ?? 0),
+      precipType: precipType({ prcp, snow }),
+      precipBucket: precipBucket(prcp),
+      tempBucket: tempBucket(tmax),
+      snowBucket: snowBucket(snow),
+      weekend: isWeekend(date.getDay()) ? 'Weekend' : 'Weekday'
+    };
+  });
+}
+
+const baseFilters = {
+  yearMin: 1940, yearMax: 2026,
+  seasons: [], months: [], decades: [],
+  tempBuckets: [], precipTypes: [], precipBuckets: [], snowBuckets: [],
+  dayTypes: [], eras: [],
+  extremes: 'All'
+};
+
+function createExtremeThresholds(rows) {
+  const sortedT = [...rows].map(d => d.tmax).sort((a,b) => a-b);
+  const sortedP = [...rows].map(d => d.prcp).sort((a,b) => a-b);
+  const q = (arr, p) => arr[Math.max(0, Math.min(arr.length - 1, Math.floor((arr.length - 1) * p)))];
+  return { cold5: q(sortedT, .05), hot95: q(sortedT, .95), wet95: q(sortedP, .95) };
+}
+
+function passes(row, filters, thresholds, omit = '') {
+  if (omit !== 'years' && (row.year < filters.yearMin || row.year > filters.yearMax)) return false;
+  if (omit !== 'seasons' && filters.seasons.length && !filters.seasons.includes(row.season)) return false;
+  if (omit !== 'months' && filters.months.length && !filters.months.includes(row.month)) return false;
+  if (omit !== 'decades' && filters.decades.length && !filters.decades.includes(row.decade)) return false;
+  if (omit !== 'tempBuckets' && filters.tempBuckets.length && !filters.tempBuckets.includes(row.tempBucket)) return false;
+  if (omit !== 'precipTypes' && filters.precipTypes.length && !filters.precipTypes.includes(row.precipType)) return false;
+  if (omit !== 'precipBuckets' && filters.precipBuckets.length && !filters.precipBuckets.includes(row.precipBucket)) return false;
+  if (omit !== 'snowBuckets' && filters.snowBuckets.length && !filters.snowBuckets.includes(row.snowBucket)) return false;
+  if (omit !== 'dayTypes' && filters.dayTypes.length && !filters.dayTypes.includes(row.weekend)) return false;
+  if (omit !== 'eras' && filters.eras.length && !filters.eras.includes(row.era)) return false;
+  if (omit !== 'extremes') {
+    if (filters.extremes === 'Heat' && row.tmax < thresholds.hot95) return false;
+    if (filters.extremes === 'Cold' && row.tmax > thresholds.cold5) return false;
+    if (filters.extremes === 'Wet' && row.prcp < thresholds.wet95) return false;
+    if (filters.extremes === 'Any' && !(row.tmax >= thresholds.hot95 || row.tmax <= thresholds.cold5 || row.prcp >= thresholds.wet95)) return false;
+  }
+  return true;
+}
+
+function TooltipBox({ active, payload, label }) {
+  if (!active || !payload || !payload.length) return null;
+  return <div className="tooltip-box">
+    <div className="font-bold text-white mb-1">{label}</div>
+    {payload.map((p, i) => <div key={i} className="text-xs" style={{ color: p.color }}>
+      {p.name}: {typeof p.value === 'number' ? fmt(p.value, 2) : p.value}
+    </div>)}
+  </div>;
+}
+
+function Header({ rows, filtered }) {
+  const latest = rows[rows.length - 1];
+  return <div className="panel p-5 mb-4">
+    <div className="flex flex-wrap justify-between gap-4">
+      <div>
+        <div className="eyebrow">Charlotte Douglas Airport NOAA station GHCND:USW00013881</div>
+        <h1 className="text-3xl md:text-4xl font-extrabold mt-2 tracking-normal">Charlotte Weather Intelligence</h1>
+        <p className="text-sm mt-2" style={{ color: COLORS.muted }}>
+          Daily temperature, rain, snow, climate trends, and drought signals from 1940 through {latest?.year || 2026}.
+        </p>
+      </div>
+      <div className="panel-soft px-4 py-3 min-w-[230px]">
+        <div className="text-xs uppercase font-extrabold tracking-wide" style={{ color: COLORS.muted }}>Active Selection</div>
+        <div className="text-2xl font-extrabold mt-1">{filtered.length.toLocaleString()} days</div>
+        <div className="text-xs mt-1" style={{ color: COLORS.muted }}>{rows.length.toLocaleString()} total records loaded</div>
+      </div>
+    </div>
+  </div>;
+}
+
+function MetricCard({ label, value, sub, color }) {
+  return <div className="metric">
+    <div className="metric-label">{label}</div>
+    <div className="metric-value" style={{ color }}>{value}</div>
+    <div className="metric-sub">{sub}</div>
+  </div>;
+}
+
+function FilterChips({ options, selected, valid, onToggle }) {
+  return <div className="flex flex-wrap gap-2">
+    {options.map(opt => {
+      const key = typeof opt === 'object' ? opt.value : opt;
+      const label = typeof opt === 'object' ? opt.label : opt;
+      const ok = valid.has(key);
+      return <button key={key} disabled={!ok} onClick={() => onToggle(key)}
+        className={`chip ${selected.includes(key) ? 'chip-on' : ''} ${!ok ? 'chip-off' : ''}`}>
+        {label}
+      </button>;
+    })}
+  </div>;
+}
+
+function Sidebar({ rows, filters, setFilters, thresholds }) {
+  const options = useMemo(() => {
+    const valueSet = (omit, fn) => new Set(rows.filter(r => passes(r, filters, thresholds, omit)).map(fn));
+    return {
+      seasons: valueSet('seasons', r => r.season),
+      months: valueSet('months', r => r.month),
+      decades: valueSet('decades', r => r.decade),
+      tempBuckets: valueSet('tempBuckets', r => r.tempBucket),
+      precipTypes: valueSet('precipTypes', r => r.precipType),
+      precipBuckets: valueSet('precipBuckets', r => r.precipBucket),
+      snowBuckets: valueSet('snowBuckets', r => r.snowBucket),
+      dayTypes: valueSet('dayTypes', r => r.weekend),
+      eras: valueSet('eras', r => r.era)
+    };
+  }, [rows, filters, thresholds]);
+  const set = patch => setFilters(f => ({ ...f, ...patch }));
+  const toggle = (key, val) => setFilters(f => ({ ...f, [key]: f[key].includes(val) ? f[key].filter(x => x !== val) : [...f[key], val] }));
+  const decades = Array.from(new Set(rows.map(r => r.decade))).sort((a,b) => a-b);
+
+  return <aside className="panel sidebar p-4">
+    <div className="flex items-start justify-between gap-3 mb-4">
+      <div>
+        <div className="eyebrow">Cascading Controls</div>
+        <h2 className="text-xl font-extrabold mt-1">Filters</h2>
+      </div>
+      <button className="select-chip" onClick={() => setFilters(baseFilters)}>Reset</button>
+    </div>
+
+    <div className="filter-block border-t-0 pt-0 mt-0">
+      <div className="field-label"><span>Year Range</span><span>{filters.yearMin}-{filters.yearMax}</span></div>
+      <input type="range" min="1940" max="2026" value={filters.yearMin} onChange={e => set({ yearMin: Math.min(Number(e.target.value), filters.yearMax) })} />
+      <input type="range" min="1940" max="2026" value={filters.yearMax} onChange={e => set({ yearMax: Math.max(Number(e.target.value), filters.yearMin) })} />
+    </div>
+
+    <div className="filter-block">
+      <div className="field-label"><span>Season</span><span>{filters.seasons.length || 'All'}</span></div>
+      <FilterChips options={SEASONS} selected={filters.seasons} valid={options.seasons} onToggle={v => toggle('seasons', v)} />
+    </div>
+
+    <div className="filter-block">
+      <div className="field-label"><span>Month</span><span>{filters.months.length || 'All'}</span></div>
+      <FilterChips options={MONTHS.map((m,i) => ({ label: m, value: i + 1 }))} selected={filters.months} valid={options.months} onToggle={v => toggle('months', v)} />
+    </div>
+
+    <div className="filter-block">
+      <div className="field-label"><span>Decade</span><span>{filters.decades.length || 'All'}</span></div>
+      <FilterChips options={decades.map(d => ({ label: `${d}s`, value: d }))} selected={filters.decades} valid={options.decades} onToggle={v => toggle('decades', v)} />
+    </div>
+
+    <div className="filter-block">
+      <div className="field-label"><span>High Temp Band</span><span>{filters.tempBuckets.length || 'All'}</span></div>
+      <FilterChips options={['Freezing','Cool','Mild','Hot','Extreme']} selected={filters.tempBuckets} valid={options.tempBuckets} onToggle={v => toggle('tempBuckets', v)} />
+    </div>
+
+    <div className="filter-block">
+      <div className="field-label"><span>Precip Type</span><span>{filters.precipTypes.length || 'All'}</span></div>
+      <FilterChips options={['Dry','Rain','Snow','Mixed']} selected={filters.precipTypes} valid={options.precipTypes} onToggle={v => toggle('precipTypes', v)} />
+    </div>
+
+    <div className="filter-block">
+      <div className="field-label"><span>Precip Amount</span><span>{filters.precipBuckets.length || 'All'}</span></div>
+      <FilterChips options={['None','Trace','Light','Moderate','Heavy']} selected={filters.precipBuckets} valid={options.precipBuckets} onToggle={v => toggle('precipBuckets', v)} />
+    </div>
+
+    <div className="filter-block">
+      <div className="field-label"><span>Snowfall</span><span>{filters.snowBuckets.length || 'All'}</span></div>
+      <FilterChips options={['No Snow','Dusting','Measurable','Storm']} selected={filters.snowBuckets} valid={options.snowBuckets} onToggle={v => toggle('snowBuckets', v)} />
+    </div>
+
+    <div className="filter-block">
+      <div className="field-label"><span>Day Type</span><span>{filters.dayTypes.length || 'All'}</span></div>
+      <FilterChips options={['Weekday','Weekend']} selected={filters.dayTypes} valid={options.dayTypes} onToggle={v => toggle('dayTypes', v)} />
+    </div>
+
+    <div className="filter-block">
+      <div className="field-label"><span>Climate Era</span><span>{filters.eras.length || 'All'}</span></div>
+      <FilterChips options={ERA_OPTIONS.slice(1)} selected={filters.eras} valid={options.eras} onToggle={v => toggle('eras', v)} />
+    </div>
+
+    <div className="filter-block">
+      <div className="field-label"><span>Extreme Events</span><span>{filters.extremes}</span></div>
+      <select value={filters.extremes} onChange={e => set({ extremes: e.target.value })}>
+        {['All','Heat','Cold','Wet','Any'].map(v => <option key={v} value={v}>{v}</option>)}
+      </select>
+    </div>
+  </aside>;
+}
+
+function DonutChart({ data }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    ref.current.innerHTML = '';
+    const width = ref.current.clientWidth || 320;
+    const height = 290;
+    const radius = Math.min(width, height) / 2 - 20;
+    const svg = d3.select(ref.current).append('svg').attr('width', width).attr('height', height);
+    const g = svg.append('g').attr('transform', `translate(${width / 2},${height / 2 - 4})`);
+    const color = d3.scaleOrdinal().domain(data.map(d => d.name)).range([COLORS.snow, COLORS.teal, COLORS.gold, COLORS.coral]);
+    const total = d3.sum(data, d => d.value);
+    const arc = d3.arc().innerRadius(radius * .58).outerRadius(radius);
+    const pie = d3.pie().sort(null).value(d => d.value);
+    g.selectAll('path').data(pie(data)).enter().append('path')
+      .attr('d', arc).attr('fill', d => color(d.data.name)).attr('stroke', '#0b1016').attr('stroke-width', 3);
+    g.append('text').attr('text-anchor','middle').attr('fill','#edf3f8').attr('font-size',24).attr('font-weight',800).attr('y',-2).text(fmt(total,1));
+    g.append('text').attr('text-anchor','middle').attr('fill','#91a2b4').attr('font-size',12).attr('font-weight',700).attr('y',18).text('inches');
+    const legend = svg.append('g').attr('transform', `translate(10,${height - 22})`);
+    data.forEach((d, i) => {
+      const item = legend.append('g').attr('transform', `translate(${i * 80},0)`);
+      item.append('rect').attr('width',10).attr('height',10).attr('rx',2).attr('fill', color(d.name));
+      item.append('text').attr('x',14).attr('y',10).attr('fill','#cbd7e3').attr('font-size',11).attr('font-weight',700).text(d.name);
+    });
+  }, [data]);
+  return <div ref={ref} className="w-full h-[290px]" />;
+}
+
+function Gauge({ pctNormal }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    ref.current.innerHTML = '';
+    const width = ref.current.clientWidth || 380;
+    const height = 210;
+    const radius = Math.min(width - 40, 320) / 2;
+    const svg = d3.select(ref.current).append('svg').attr('width', width).attr('height', height);
+    const g = svg.append('g').attr('transform', `translate(${width / 2},${height - 28})`);
+    const scale = d3.scaleLinear().domain([0, 140]).range([-Math.PI, 0]);
+    const bands = [
+      [0, 50, COLORS.coral], [50, 65, '#ef7f4f'], [65, 75, COLORS.gold],
+      [75, 90, '#d6c65b'], [90, 110, COLORS.teal], [110, 140, COLORS.blue]
+    ];
+    bands.forEach(([a,b,c]) => {
+      g.append('path').attr('d', d3.arc().innerRadius(radius - 22).outerRadius(radius).startAngle(scale(a)).endAngle(scale(b))()).attr('fill', c).attr('opacity', .92);
+    });
+    const angle = scale(Math.max(0, Math.min(140, pctNormal)));
+    g.append('line').attr('x1',0).attr('y1',0).attr('x2',Math.cos(angle - Math.PI / 2) * (radius - 32)).attr('y2',Math.sin(angle - Math.PI / 2) * (radius - 32)).attr('stroke','#fff').attr('stroke-width',4).attr('stroke-linecap','round');
+    g.append('circle').attr('r',6).attr('fill','#fff');
+    svg.append('text').attr('x',width/2).attr('y',height-58).attr('text-anchor','middle').attr('fill','#edf3f8').attr('font-size',34).attr('font-weight',800).text(`${Math.round(pctNormal)}%`);
+    svg.append('text').attr('x',width/2).attr('y',height-34).attr('text-anchor','middle').attr('fill','#91a2b4').attr('font-size',12).attr('font-weight',800).text('of 1991-2020 normal');
+  }, [pctNormal]);
+  return <div ref={ref} className="w-full h-[210px]" />;
+}
+
+function PlotlyTreemap({ data }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    Plotly.newPlot(ref.current, [{
+      type: 'treemap',
+      labels: data.map(d => d.month),
+      parents: data.map(() => ''),
+      values: data.map(d => d.prcp),
+      texttemplate: '<b>%{label}</b><br>%{value:.2f} in',
+      hovertemplate: '%{label}<br>Avg precip: %{value:.2f} in<extra></extra>',
+      marker: { colors: data.map(d => d.prcp), colorscale: [[0, '#17212b'], [.45, '#4f8cff'], [1, '#25c2a0']], line: { width: 2, color: '#0b1016' } }
+    }], {
+      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', margin: { t: 0, r: 0, b: 0, l: 0 },
+      font: { color: '#edf3f8', family: 'Inter' }
+    }, { displayModeBar: false, responsive: true });
+  }, [data]);
+  return <div ref={ref} className="w-full h-[320px]" />;
+}
+
+function PlotlyMap({ kpis }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    Plotly.newPlot(ref.current, [{
+      type: 'scattermapbox',
+      lat: [35.214], lon: [-80.943],
+      mode: 'markers',
+      marker: { size: 24, color: COLORS.teal, opacity: .92 },
+      text: [`Charlotte Douglas Airport<br>Avg high: ${fmt(kpis.avgHigh,1)} F<br>Annual precip: ${fmt(kpis.annualPrcp,1)} in<br>Snow days/year: ${fmt(kpis.snowDaysYear,1)}`],
+      hoverinfo: 'text'
+    }], {
+      mapbox: { style: 'open-street-map', center: { lat: 35.214, lon: -80.943 }, zoom: 8.7 },
+      paper_bgcolor: 'rgba(0,0,0,0)', margin: { t: 0, r: 0, b: 0, l: 0 },
+      font: { color: '#edf3f8', family: 'Inter' }
+    }, { displayModeBar: false, responsive: true });
+  }, [kpis]);
+  return <div ref={ref} className="w-full h-[390px]" />;
+}
+
+function buildAnalytics(rows, allRows) {
+  const byYear = Array.from(groupBy(rows, d => d.year), ([year, ds]) => ({
+    year, avgHigh: avg(ds,'tmax'), avgLow: avg(ds,'tmin'), avgMean: avg(ds,'tavg'),
+    prcp: sum(ds,'prcp'), snow: sum(ds,'snow'), snowDays: ds.filter(d => d.snow > 0).length,
+    wetDays: ds.filter(d => d.prcp > 0).length
+  })).sort((a,b) => a.year - b.year);
+  const byMonth = MONTHS.map((m, i) => {
+    const ds = rows.filter(d => d.month === i + 1);
+    return { month: m, monthNum: i + 1, avgHigh: avg(ds,'tmax'), avgLow: avg(ds,'tmin'), avgMean: avg(ds,'tavg'), rain: sum(ds,'prcp') - sum(ds,'snow'), snow: sum(ds,'snow'), prcp: sum(ds,'prcp') / Math.max(1, new Set(ds.map(d => d.year)).size) };
+  });
+  const seasonal = SEASONS.map(s => {
+    const ds = rows.filter(d => d.season === s);
+    return { name: s, value: sum(ds,'prcp') };
+  });
+  const byDecadeMonth = [];
+  Array.from(groupBy(rows, d => d.decade), ([decade, ds]) => {
+    const rec = { decade: `${decade}s` };
+    MONTHS.forEach((m, i) => rec[m] = sum(ds.filter(d => d.month === i + 1), 'prcp'));
+    byDecadeMonth.push(rec);
+  });
+  byDecadeMonth.sort((a,b) => parseInt(a.decade) - parseInt(b.decade));
+  const monthlyAll = Array.from(groupBy(rows, d => `${d.year}-${String(d.month).padStart(2,'0')}`), ([key, ds]) => ({ key, date: key, prcp: sum(ds,'prcp'), tavg: avg(ds,'tavg') })).sort((a,b) => a.key.localeCompare(b.key));
+  const rolling = movingSum(monthlyAll, 12);
+  const scatter = rows.filter((_, i) => i % Math.ceil(Math.max(1, rows.length / 900)) === 0).map(d => ({ x: d.tmin, y: d.tmax, z: d.prcp, season: d.season, date: d.date }));
+  const bubble = byYear.map(y => ({ x: y.avgMean, y: y.prcp, z: Math.max(45, y.snowDays * 9), year: y.year, snowDays: y.snowDays }));
+  const hottest = maxBy(rows, 'tmax');
+  const coldest = minBy(rows, 'tmin');
+  const kpis = {
+    avgHigh: avg(rows,'tmax'),
+    annualPrcp: byYear.length ? avg(byYear,'prcp') : 0,
+    snowDaysYear: byYear.length ? avg(byYear,'snowDays') : 0,
+    recordHigh: hottest,
+    recordLow: coldest
+  };
+  const normalsRows = allRows.filter(d => d.year >= 1991 && d.year <= 2020);
+  const normals = MONTHS.map((m, i) => ({ month: i + 1, normal: sum(normalsRows.filter(d => d.month === i + 1), 'prcp') / 30 }));
+  const latestMonthKey = monthlyAll.length ? monthlyAll[monthlyAll.length - 1].key : '';
+  return { byYear, byMonth, seasonal, byDecadeMonth, rolling, scatter, bubble, kpis, normals, latestMonthKey };
+}
+
+function TrendsTable({ rows }) {
+  const [period, setPeriod] = useState('Month');
+  const data = useMemo(() => {
+    let grouped;
+    if (period === 'Day') grouped = groupBy(rows, d => d.dayName);
+    if (period === 'Month') grouped = groupBy(rows, d => d.monthName);
+    if (period === 'Quarter') grouped = groupBy(rows, d => `Q${d.quarter}`);
+    if (period === 'Year') grouped = groupBy(rows, d => d.year);
+    const order = period === 'Day' ? DAYS : period === 'Month' ? MONTHS : period === 'Quarter' ? ['Q1','Q2','Q3','Q4'] : null;
+    const out = Array.from(grouped, ([key, ds]) => ({
+      period: key, days: ds.length, avgHigh: avg(ds,'tmax'), avgLow: avg(ds,'tmin'),
+      precip: sum(ds,'prcp'), snow: sum(ds,'snow'), wetDays: ds.filter(d => d.prcp > 0).length,
+      hotDays: ds.filter(d => d.tmax >= 90).length, freezeDays: ds.filter(d => d.tmin <= 32).length
+    }));
+    return out.sort((a,b) => order ? order.indexOf(a.period) - order.indexOf(b.period) : Number(a.period) - Number(b.period));
+  }, [rows, period]);
+
+  return <div>
+    <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+      <div>
+        <h3 className="text-[15px] font-extrabold text-white">Trending Table</h3>
+        <p className="text-xs mt-1" style={{ color: COLORS.muted }}>Switch the grain to compare daily, monthly, quarterly, or annual behavior.</p>
+      </div>
+      <div className="flex">
+        {PERIODS.map(p => <button key={p} onClick={() => setPeriod(p)} className={`mode-btn ${period === p ? 'mode-on' : ''}`}>{p}</button>)}
+      </div>
+    </div>
+    <div className="table-scroll overflow-auto max-h-[420px]">
+      <table>
+        <thead><tr><th>{period}</th><th>Days</th><th>Avg High</th><th>Avg Low</th><th>Precip</th><th>Snow</th><th>Wet Days</th><th>90+ Days</th><th>Freeze Days</th></tr></thead>
+        <tbody>
+          {data.map(r => <tr key={r.period}>
+            <td className="font-bold text-white">{r.period}</td><td>{r.days.toLocaleString()}</td><td>{fmt(r.avgHigh,1)} F</td><td>{fmt(r.avgLow,1)} F</td><td>{fmt(r.precip,2)} in</td><td>{fmt(r.snow,2)} in</td><td>{r.wetDays.toLocaleString()}</td><td>{r.hotDays.toLocaleString()}</td><td>{r.freezeDays.toLocaleString()}</td>
+          </tr>)}
+        </tbody>
+      </table>
+    </div>
+  </div>;
+}
+
+function DroughtPanel({ allRows }) {
+  const monthly = useMemo(() => Array.from(groupBy(allRows, d => `${d.year}-${String(d.month).padStart(2,'0')}`), ([key, ds]) => ({
+    key, year: ds[0].year, month: ds[0].month, label: `${MONTHS[ds[0].month - 1]} ${String(ds[0].year).slice(2)}`, prcp: sum(ds,'prcp')
+  })).sort((a,b) => a.key.localeCompare(b.key)), [allRows]);
+  const normals = useMemo(() => MONTHS.map((m, i) => {
+    const ds = allRows.filter(d => d.year >= 1991 && d.year <= 2020 && d.month === i + 1);
+    return { month: i + 1, normal: sum(ds,'prcp') / 30 };
+  }), [allRows]);
+  const last12 = monthly.slice(-12).map(m => ({ ...m, normal: normals[m.month - 1].normal, deficit: m.prcp - normals[m.month - 1].normal }));
+  const actual = sum(last12, 'prcp');
+  const normal = sum(last12, 'normal');
+  const pctNormal = normal ? actual / normal * 100 : 0;
+  const deficit = actual - normal;
+  const recentRolling = movingSum(monthly, 12).slice(-78);
+  const cumulative = [];
+  last12.reduce((acc, d) => {
+    const next = { label: d.label, actual: acc.actual + d.prcp, normal: acc.normal + d.normal };
+    cumulative.push(next);
+    return next;
+  }, { actual: 0, normal: 0 });
+  const dryStreak = (() => {
+    let n = 0;
+    for (let i = allRows.length - 1; i >= 0; i--) {
+      if (allRows[i].prcp > 0) break;
+      n++;
+    }
+    return n;
+  })();
+  const severity = pctNormal < 50 ? 'Exceptional drought signal' : pctNormal < 65 ? 'Extreme drought signal' : pctNormal < 75 ? 'Severe drought signal' : pctNormal < 85 ? 'Moderate drought signal' : pctNormal < 100 ? 'Abnormally dry' : 'Near or above normal';
+  const worst = movingSum(monthly, 12).filter(d => d.key.length).sort((a,b) => a.rolling - b.rolling).slice(0, 8);
+
+  return <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+    <div className="alert p-4 xl:col-span-12">
+      <div className="flex flex-wrap justify-between gap-3">
+        <div>
+          <div className="eyebrow" style={{ color: COLORS.coral }}>Drought Watch</div>
+          <div className="text-xl font-extrabold mt-1">{severity}</div>
+          <p className="text-sm mt-1" style={{ color: '#d5dde5' }}>Last 12 months: {fmt(actual,2)} inches versus {fmt(normal,2)} inches normal, a {fmt(Math.abs(deficit),2)} inch {deficit < 0 ? 'deficit' : 'surplus'}.</p>
+        </div>
+        <div className="text-right">
+          <div className="text-3xl font-extrabold" style={{ color: COLORS.gold }}>{pct(pctNormal)}</div>
+          <div className="text-xs font-bold uppercase tracking-wide" style={{ color: COLORS.muted }}>of normal precipitation</div>
+        </div>
+      </div>
+    </div>
+
+    <div className="panel chart-card xl:col-span-4">
+      <div className="chart-title"><div><h3>Drought Gauge</h3><p>1991-2020 monthly normals baseline.</p></div></div>
+      <Gauge pctNormal={pctNormal} />
+      <div className="grid grid-cols-2 gap-3 mt-2">
+        <MetricCard label="Deficit" value={`${fmt(deficit,1)} in`} sub="Last 12 months" color={deficit < 0 ? COLORS.coral : COLORS.teal} />
+        <MetricCard label="Dry Streak" value={dryStreak} sub="Consecutive dry days" color={COLORS.gold} />
+      </div>
+    </div>
+
+    <div className="panel chart-card xl:col-span-8">
+      <div className="chart-title"><div><h3>Monthly Actual vs Normal</h3><p>Recent precipitation compared with climatology.</p></div></div>
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={last12}>
+          <CartesianGrid stroke={COLORS.grid} vertical={false} />
+          <XAxis dataKey="label" />
+          <YAxis />
+          <Tooltip content={<TooltipBox />} />
+          <Legend />
+          <Bar dataKey="normal" name="Normal" fill={COLORS.blue} radius={[4,4,0,0]} />
+          <Bar dataKey="prcp" name="Actual" fill={COLORS.gold} radius={[4,4,0,0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+
+    <div className="panel chart-card xl:col-span-7">
+      <div className="chart-title"><div><h3>Cumulative Deficit Curve</h3><p>How the year built toward surplus or deficit.</p></div></div>
+      <ResponsiveContainer width="100%" height={320}>
+        <AreaChart data={cumulative}>
+          <CartesianGrid stroke={COLORS.grid} vertical={false} />
+          <XAxis dataKey="label" />
+          <YAxis />
+          <Tooltip content={<TooltipBox />} />
+          <Legend />
+          <Area type="monotone" dataKey="normal" name="Normal cumulative" stroke={COLORS.blue} fill={COLORS.blue} fillOpacity={.18} />
+          <Area type="monotone" dataKey="actual" name="Actual cumulative" stroke={COLORS.coral} fill={COLORS.coral} fillOpacity={.24} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+
+    <div className="panel chart-card xl:col-span-5">
+      <div className="chart-title"><div><h3>Rolling 12-Month Precipitation</h3><p>Recent context for drought persistence.</p></div></div>
+      <ResponsiveContainer width="100%" height={320}>
+        <LineChart data={recentRolling}>
+          <CartesianGrid stroke={COLORS.grid} vertical={false} />
+          <XAxis dataKey="key" minTickGap={30} />
+          <YAxis />
+          <Tooltip content={<TooltipBox />} />
+          <Line type="monotone" dataKey="rolling" name="12-mo precip" stroke={COLORS.teal} strokeWidth={3} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+
+    <div className="panel chart-card xl:col-span-12">
+      <div className="chart-title"><div><h3>Driest 12-Month Periods on Record</h3><p>Historical context from the full station record.</p></div></div>
+      <div className="table-scroll overflow-auto">
+        <table>
+          <thead><tr><th>Ending Month</th><th>12-Month Precip</th><th>Rank</th></tr></thead>
+          <tbody>{worst.map((r, i) => <tr key={r.key}><td className="font-bold text-white">{r.key}</td><td>{fmt(r.rolling,2)} in</td><td>{i + 1}</td></tr>)}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>;
+}
+
+function Dashboard({ rows, allRows, analytics }) {
+  const [tab, setTab] = useState('Overview');
+  const k = analytics.kpis;
+  const chartMargin = { top: 8, right: 12, left: -8, bottom: 0 };
+  const monthPrecipAvg = analytics.byMonth.map(d => ({ month: d.month, prcp: d.prcp }));
+
+  return <main>
+    <Header rows={allRows} filtered={rows} />
+    <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
+      <MetricCard label="Average High" value={`${fmt(k.avgHigh,1)} F`} sub="Mean daily maximum in active selection" color={COLORS.gold} />
+      <MetricCard label="Annual Precip" value={`${fmt(k.annualPrcp,1)} in`} sub="Average by year" color={COLORS.teal} />
+      <MetricCard label="Snow Days / Year" value={fmt(k.snowDaysYear,1)} sub="Days with snowfall above zero" color={COLORS.snow} />
+      <MetricCard label="Record High" value={`${k.recordHigh?.tmax ?? '-'} F`} sub={k.recordHigh?.date || 'No records'} color={COLORS.coral} />
+    </div>
+
+    <div className="panel p-2 mb-4 flex flex-wrap gap-2">
+      {['Overview','Temperature','Precipitation','Drought','Explore'].map(t => <button key={t} className={`tab ${tab === t ? 'tab-active' : ''}`} onClick={() => setTab(t)}>{t}</button>)}
+    </div>
+
+    {tab === 'Overview' && <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+      <div className="panel chart-card xl:col-span-7">
+        <div className="chart-title"><div><h3>Annual Temperature Trend</h3><p>High, low, and mean temperatures by year.</p></div></div>
+        <ResponsiveContainer width="100%" height={330}>
+          <LineChart data={analytics.byYear} margin={chartMargin}>
+            <CartesianGrid stroke={COLORS.grid} vertical={false} />
+            <XAxis dataKey="year" minTickGap={24} />
+            <YAxis />
+            <Tooltip content={<TooltipBox />} />
+            <Legend />
+            <Line type="monotone" dataKey="avgHigh" name="Avg high" stroke={COLORS.gold} strokeWidth={2.5} dot={false} />
+            <Line type="monotone" dataKey="avgMean" name="Avg mean" stroke={COLORS.teal} strokeWidth={2.5} dot={false} />
+            <Line type="monotone" dataKey="avgLow" name="Avg low" stroke={COLORS.blue} strokeWidth={2.5} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="panel chart-card xl:col-span-5">
+        <div className="chart-title"><div><h3>Precipitation by Season</h3><p>D3 donut chart.</p></div></div>
+        <DonutChart data={analytics.seasonal} />
+      </div>
+      <div className="panel chart-card xl:col-span-6">
+        <div className="chart-title"><div><h3>Monthly Temperature Profile</h3><p>Bar chart of average high and low.</p></div></div>
+        <ResponsiveContainer width="100%" height={320}>
+          <BarChart data={analytics.byMonth}>
+            <CartesianGrid stroke={COLORS.grid} vertical={false} />
+            <XAxis dataKey="month" />
+            <YAxis />
+            <Tooltip content={<TooltipBox />} />
+            <Legend />
+            <Bar dataKey="avgHigh" name="Avg high" fill={COLORS.gold} radius={[4,4,0,0]} />
+            <Bar dataKey="avgLow" name="Avg low" fill={COLORS.blue} radius={[4,4,0,0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="panel chart-card xl:col-span-6">
+        <div className="chart-title"><div><h3>Rain and Snow by Month</h3><p>Stacked bar chart.</p></div></div>
+        <ResponsiveContainer width="100%" height={320}>
+          <BarChart data={analytics.byMonth}>
+            <CartesianGrid stroke={COLORS.grid} vertical={false} />
+            <XAxis dataKey="month" />
+            <YAxis />
+            <Tooltip content={<TooltipBox />} />
+            <Legend />
+            <Bar dataKey="rain" name="Rain" stackId="a" fill={COLORS.teal} />
+            <Bar dataKey="snow" name="Snow" stackId="a" fill={COLORS.snow} radius={[4,4,0,0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>}
+
+    {tab === 'Temperature' && <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+      <div className="panel chart-card xl:col-span-7">
+        <div className="chart-title"><div><h3>Daily High vs Low</h3><p>Scatterplot sampled from the active selection.</p></div></div>
+        <ResponsiveContainer width="100%" height={390}>
+          <ScatterChart margin={chartMargin}>
+            <CartesianGrid stroke={COLORS.grid} />
+            <XAxis type="number" dataKey="x" name="Low" unit=" F" />
+            <YAxis type="number" dataKey="y" name="High" unit=" F" />
+            <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<TooltipBox />} />
+            <Scatter name="Daily observations" data={analytics.scatter} fill={COLORS.violet} fillOpacity={.72} />
+          </ScatterChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="panel chart-card xl:col-span-5">
+        <div className="chart-title"><div><h3>Annual Heat Days</h3><p>Days at or above 90 F.</p></div></div>
+        <ResponsiveContainer width="100%" height={390}>
+          <AreaChart data={analytics.byYear.map(y => ({ ...y, hotDays: rows.filter(d => d.year === y.year && d.tmax >= 90).length }))}>
+            <CartesianGrid stroke={COLORS.grid} vertical={false} />
+            <XAxis dataKey="year" minTickGap={24} />
+            <YAxis />
+            <Tooltip content={<TooltipBox />} />
+            <Area type="monotone" dataKey="hotDays" name="90+ F days" stroke={COLORS.coral} fill={COLORS.coral} fillOpacity={.28} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="panel chart-card xl:col-span-12">
+        <TrendsTable rows={rows} />
+      </div>
+    </div>}
+
+    {tab === 'Precipitation' && <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+      <div className="panel chart-card xl:col-span-7">
+        <div className="chart-title"><div><h3>Rolling 12-Month Precipitation</h3><p>Area chart smoothing wet and dry regimes.</p></div></div>
+        <ResponsiveContainer width="100%" height={330}>
+          <AreaChart data={analytics.rolling}>
+            <CartesianGrid stroke={COLORS.grid} vertical={false} />
+            <XAxis dataKey="key" minTickGap={36} />
+            <YAxis />
+            <Tooltip content={<TooltipBox />} />
+            <Area type="monotone" dataKey="rolling" name="12-month precip" stroke={COLORS.teal} fill={COLORS.teal} fillOpacity={.22} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="panel chart-card xl:col-span-5">
+        <div className="chart-title"><div><h3>Average Precipitation Treemap</h3><p>Plotly treemap by calendar month.</p></div></div>
+        <PlotlyTreemap data={monthPrecipAvg} />
+      </div>
+      <div className="panel chart-card xl:col-span-6">
+        <div className="chart-title"><div><h3>Climate Bubble Chart</h3><p>X=avg temperature, Y=annual precip, size=snow days.</p></div></div>
+        <ResponsiveContainer width="100%" height={380}>
+          <ScatterChart margin={chartMargin}>
+            <CartesianGrid stroke={COLORS.grid} />
+            <XAxis type="number" dataKey="x" name="Avg temp" unit=" F" />
+            <YAxis type="number" dataKey="y" name="Precip" unit=" in" />
+            <ZAxis type="number" dataKey="z" range={[55, 620]} name="Snow days" />
+            <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<TooltipBox />} />
+            <Scatter name="Years" data={analytics.bubble} fill={COLORS.blue} fillOpacity={.72} />
+          </ScatterChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="panel chart-card xl:col-span-6">
+        <div className="chart-title"><div><h3>Monthly Precipitation by Decade</h3><p>Stacked bar matrix across climatological eras.</p></div></div>
+        <ResponsiveContainer width="100%" height={380}>
+          <BarChart data={analytics.byDecadeMonth}>
+            <CartesianGrid stroke={COLORS.grid} vertical={false} />
+            <XAxis dataKey="decade" />
+            <YAxis />
+            <Tooltip content={<TooltipBox />} />
+            <Legend />
+            {MONTHS.map((m, i) => <Bar key={m} dataKey={m} stackId="m" fill={d3.interpolateSpectral(i / 11)} />)}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>}
+
+    {tab === 'Drought' && <DroughtPanel allRows={allRows} />}
+
+    {tab === 'Explore' && <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+      <div className="panel chart-card xl:col-span-5">
+        <div className="chart-title"><div><h3>Station Map</h3><p>Plotly OpenStreetMap marker for Charlotte Douglas Airport.</p></div></div>
+        <PlotlyMap kpis={k} />
+      </div>
+      <div className="panel chart-card xl:col-span-7">
+        <TrendsTable rows={rows} />
+      </div>
+    </div>}
+  </main>;
+}
+
+function App() {
+  const [raw, setRaw] = useState([]);
+  const [error, setError] = useState('');
+  const [filters, setFilters] = useState(baseFilters);
+  useEffect(() => {
+    fetch('./charlotte-weather.json')
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then(d => setRaw(prepareRows(d)))
+      .catch(err => setError(err.message));
+  }, []);
+  const thresholds = useMemo(() => raw.length ? createExtremeThresholds(raw) : { cold5: 0, hot95: 0, wet95: 0 }, [raw]);
+  const filtered = useMemo(() => raw.filter(r => passes(r, filters, thresholds)), [raw, filters, thresholds]);
+  const analytics = useMemo(() => buildAnalytics(filtered, raw), [filtered, raw]);
+
+  if (error) return <div className="p-8 text-red-200">Unable to load charlotte-weather.json: {error}. Serve this folder over HTTP and open codex-dashboard.html.</div>;
+  if (!raw.length) return <div className="min-h-screen grid place-items-center"><div className="panel p-6 text-center"><div className="text-xl font-extrabold">Loading Charlotte weather history...</div><div className="text-sm mt-2" style={{ color: COLORS.muted }}>Reading daily NOAA observations.</div></div></div>;
+
+  return <div className="app-shell">
+    <Sidebar rows={raw} filters={filters} setFilters={setFilters} thresholds={thresholds} />
+    <Dashboard rows={filtered} allRows={raw} analytics={analytics} />
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

@@ -1,0 +1,1240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Charlotte, NC Weather Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+<script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+<style>
+  html, body { background:#0f172a; color:#e2e8f0; font-family:'Inter',ui-sans-serif,system-ui,sans-serif; }
+  .card { background:#1e293b; border:1px solid #334155; border-radius:14px; box-shadow:0 6px 22px rgba(0,0,0,.35); }
+  .card-header { background:linear-gradient(90deg,rgba(59,130,246,.18),rgba(139,92,246,.12)); border-bottom:1px solid #334155; padding:14px 18px; border-radius:14px 14px 0 0; }
+  .pill { padding:6px 12px; border-radius:999px; border:1px solid #334155; font-size:12px; cursor:pointer; transition:.15s all; background:#0f172a; color:#cbd5e1;}
+  .pill:hover { border-color:#3b82f6; color:#fff; }
+  .pill-active { background:linear-gradient(90deg,#3b82f6,#06b6d4); color:#fff; border-color:transparent; }
+  .tab-btn { padding:10px 18px; border-radius:10px; font-weight:500; transition:.2s all; color:#94a3b8; cursor:pointer; }
+  .tab-btn:hover { color:#e2e8f0; background:rgba(59,130,246,.08); }
+  .tab-active { background:linear-gradient(90deg,#3b82f6,#8b5cf6); color:#fff !important; box-shadow:0 4px 14px rgba(59,130,246,.35); }
+  .kpi { background:linear-gradient(135deg,#1e293b,#0f172a); border:1px solid #334155; border-radius:14px; padding:18px; position:relative; overflow:hidden; }
+  .kpi::before { content:""; position:absolute; top:0;left:0;right:0;height:3px; background:linear-gradient(90deg,#3b82f6,#06b6d4,#10b981); }
+  .scroll-thin::-webkit-scrollbar { width:8px; height:8px; }
+  .scroll-thin::-webkit-scrollbar-thumb { background:#334155; border-radius:4px; }
+  .scroll-thin::-webkit-scrollbar-track { background:#0f172a; }
+  input[type=range] { -webkit-appearance:none; height:4px; background:#334155; border-radius:4px; outline:none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:#3b82f6; cursor:pointer; border:2px solid #0f172a; }
+  input[type=checkbox] { accent-color:#3b82f6; }
+  input[type=radio] { accent-color:#3b82f6; }
+  .tooltip-box { background:#0f172a !important; border:1px solid #334155 !important; border-radius:8px !important; padding:8px 12px !important; font-size:12px; }
+  table { font-size:13px; }
+  th { color:#94a3b8; font-weight:500; text-transform:uppercase; letter-spacing:.05em; font-size:11px; }
+  td, th { padding:8px 12px; border-bottom:1px solid #334155; }
+  tbody tr:hover { background:rgba(59,130,246,.06); }
+  details > summary { list-style:none; cursor:pointer; }
+  details > summary::-webkit-details-marker { display:none; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect, useMemo, useRef } = React;
+const R = window.Recharts;
+const { ResponsiveContainer, LineChart, Line, AreaChart, Area, BarChart, Bar, ScatterChart, Scatter,
+        XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine, Cell } = R;
+
+const COLORS = {
+  bg:'#0f172a', card:'#1e293b', border:'#334155',
+  blue:'#3b82f6', cyan:'#06b6d4', emerald:'#10b981',
+  amber:'#f59e0b', rose:'#f43f5e', violet:'#8b5cf6',
+  text:'#e2e8f0', dim:'#94a3b8'
+};
+const SEASON_COLORS = { Spring:'#10b981', Summer:'#f59e0b', Fall:'#f43f5e', Winter:'#06b6d4' };
+const DECADE_COLORS = ['#3b82f6','#06b6d4','#10b981','#f59e0b','#f43f5e','#8b5cf6','#ec4899','#22d3ee','#84cc16'];
+
+function getSeason(m){ // m: 1-12
+  if (m>=3 && m<=5) return 'Spring';
+  if (m>=6 && m<=8) return 'Summer';
+  if (m>=9 && m<=11) return 'Fall';
+  return 'Winter';
+}
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const SEASONS = ['Spring','Summer','Fall','Winter'];
+
+function classifyPrcp(prcp,snow){
+  // Precip type
+  if (prcp===0 && snow===0) return {type:'None', amount:'None'};
+  let type;
+  if (snow>0 && prcp>0) type='Mixed';
+  else if (snow>0) type='Snow';
+  else type='Rain';
+  let amount;
+  if (prcp<0.1) amount='Light';
+  else if (prcp<0.5) amount='Moderate';
+  else amount='Heavy';
+  return {type, amount};
+}
+
+function fmt(n, d=1){ if (n==null || isNaN(n)) return '–'; return Number(n).toFixed(d); }
+
+function CustomTooltip({active,payload,label,unit=''}){
+  if (!active || !payload || !payload.length) return null;
+  return (
+    <div className="tooltip-box">
+      <div style={{color:'#cbd5e1',marginBottom:4,fontWeight:600}}>{label}</div>
+      {payload.map((p,i)=>(
+        <div key={i} style={{color:p.color,fontSize:12}}>
+          {p.name}: {typeof p.value==='number'? p.value.toFixed(2):p.value}{unit}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ---------- DONUT (D3) ---------- */
+function DonutChart({data}) {
+  const ref = useRef(null);
+  useEffect(()=>{
+    if (!ref.current) return;
+    const el = ref.current;
+    el.innerHTML='';
+    const w = el.clientWidth, h = 280, r = Math.min(w,h)/2 - 10;
+    const svg = d3.select(el).append('svg').attr('width',w).attr('height',h);
+    const g = svg.append('g').attr('transform',`translate(${w/2},${h/2})`);
+    const color = d3.scaleOrdinal().domain(data.map(d=>d.name)).range([COLORS.emerald,COLORS.amber,COLORS.rose,COLORS.cyan]);
+    const pie = d3.pie().value(d=>d.value).sort(null);
+    const arc = d3.arc().innerRadius(r*0.6).outerRadius(r);
+    const total = d3.sum(data,d=>d.value);
+    g.selectAll('path').data(pie(data)).enter().append('path')
+      .attr('d',arc).attr('fill',d=>color(d.data.name))
+      .attr('stroke','#0f172a').attr('stroke-width',2);
+    g.selectAll('text.lbl').data(pie(data)).enter().append('text')
+      .attr('class','lbl').attr('transform',d=>`translate(${arc.centroid(d)})`)
+      .attr('text-anchor','middle').attr('fill','#fff').attr('font-size',11).attr('font-weight',600)
+      .text(d=> ((d.data.value/total)*100).toFixed(0)+'%' );
+    g.append('text').attr('text-anchor','middle').attr('y',-6).attr('fill','#e2e8f0').attr('font-size',13).text('Precip');
+    g.append('text').attr('text-anchor','middle').attr('y',14).attr('fill','#94a3b8').attr('font-size',12).text(fmt(total,1)+' in');
+    // Legend
+    const legend = svg.append('g').attr('transform',`translate(10,${h-20})`);
+    data.forEach((d,i)=>{
+      const lg = legend.append('g').attr('transform',`translate(${i*90},0)`);
+      lg.append('rect').attr('width',10).attr('height',10).attr('fill',color(d.name)).attr('rx',2);
+      lg.append('text').attr('x',14).attr('y',9).attr('fill','#cbd5e1').attr('font-size',11).text(d.name);
+    });
+  },[data]);
+  return <div ref={ref} style={{width:'100%',height:280}} />;
+}
+
+/* ---------- PLOTLY TREEMAP ---------- */
+function PlotlyTreemap({data}) {
+  const ref = useRef(null);
+  useEffect(()=>{
+    if (!ref.current) return;
+    Plotly.newPlot(ref.current, [{
+      type:'treemap',
+      labels: data.map(d=>d.month),
+      parents: data.map(()=>''),
+      values: data.map(d=>d.avg),
+      textinfo:'label+value',
+      texttemplate:'<b>%{label}</b><br>%{value:.2f} in',
+      marker:{
+        colors: data.map(d=>d.avg),
+        colorscale:[[0,'#1e293b'],[0.5,'#3b82f6'],[1,'#06b6d4']],
+        line:{color:'#0f172a',width:2}
+      },
+      hovertemplate:'%{label}: %{value:.2f} in<extra></extra>',
+    }],{
+      paper_bgcolor:'#1e293b', plot_bgcolor:'#1e293b',
+      margin:{t:10,l:10,r:10,b:10}, font:{color:'#e2e8f0',family:'Inter'}
+    },{displayModeBar:false, responsive:true});
+  },[data]);
+  return <div ref={ref} style={{width:'100%',height:320}} />;
+}
+
+/* ---------- PLOTLY MAP ---------- */
+function PlotlyMap({stats}) {
+  const ref = useRef(null);
+  useEffect(()=>{
+    if (!ref.current) return;
+    Plotly.newPlot(ref.current, [{
+      type:'scattermapbox',
+      lat:[35.2271], lon:[-80.8431],
+      mode:'markers',
+      marker:{size:24, color:'#3b82f6'},
+      text:[`Charlotte, NC<br>Avg High: ${fmt(stats.avgHigh,1)}°F<br>Avg Low: ${fmt(stats.avgLow,1)}°F<br>Annual Precip: ${fmt(stats.annualPrcp,1)} in`],
+      hoverinfo:'text'
+    }],{
+      mapbox:{ style:'open-street-map', center:{lat:35.2271,lon:-80.8431}, zoom:8 },
+      paper_bgcolor:'#1e293b', margin:{t:0,l:0,r:0,b:0}, font:{color:'#e2e8f0'}
+    },{displayModeBar:false, responsive:true});
+  },[stats]);
+  return <div ref={ref} style={{width:'100%',height:400}} />;
+}
+
+/* ---------- FILTER SIDEBAR ---------- */
+function Sidebar({filters,setFilters,reset,collapsed,setCollapsed}) {
+  const F=filters, S=setFilters;
+  const upd = (k,v)=>S({...F,[k]:v});
+  const toggleArr = (k,v)=>{
+    const arr=F[k]; S({...F,[k]: arr.includes(v)? arr.filter(x=>x!==v):[...arr,v]});
+  };
+  const irrelevantMonths = useMemo(()=>{
+    if (F.seasons.length===0 || F.seasons.length===4) return new Set();
+    const ok = new Set();
+    for (let m=1;m<=12;m++) if (F.seasons.includes(getSeason(m))) ok.add(m);
+    return new Set(Array.from({length:12},(_,i)=>i+1).filter(m=>!ok.has(m)));
+  },[F.seasons]);
+
+  if (collapsed) {
+    return (
+      <div className="card p-3 flex flex-col items-center gap-3" style={{width:50, position:'sticky', top:16, alignSelf:'flex-start'}}>
+        <button onClick={()=>setCollapsed(false)} className="text-blue-400 hover:text-blue-300" title="Expand">
+          <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+        </button>
+        <div style={{writingMode:'vertical-rl',color:'#94a3b8',fontSize:12,letterSpacing:'.1em'}}>FILTERS</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card p-4 scroll-thin" style={{width:300, position:'sticky', top:16, alignSelf:'flex-start', maxHeight:'calc(100vh - 32px)', overflowY:'auto'}}>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-semibold text-white">Filters</h2>
+        <button onClick={()=>setCollapsed(true)} className="text-slate-400 hover:text-blue-400">
+          <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg>
+        </button>
+      </div>
+      <button onClick={reset} className="w-full mb-4 py-2 rounded-lg text-sm font-medium" style={{background:'linear-gradient(90deg,#f43f5e,#8b5cf6)',color:'#fff'}}>Reset All Filters</button>
+
+      <div className="mb-4">
+        <label className="text-xs text-slate-400 font-semibold uppercase tracking-wide">Year Range</label>
+        <div className="flex justify-between text-sm mt-1 text-white"><span>{F.yearMin}</span><span>{F.yearMax}</span></div>
+        <input type="range" min="1940" max="2026" value={F.yearMin} onChange={e=>upd('yearMin',Math.min(+e.target.value,F.yearMax))} className="w-full" />
+        <input type="range" min="1940" max="2026" value={F.yearMax} onChange={e=>upd('yearMax',Math.max(+e.target.value,F.yearMin))} className="w-full" />
+      </div>
+
+      <div className="mb-4">
+        <label className="text-xs text-slate-400 font-semibold uppercase tracking-wide">Season</label>
+        <div className="flex flex-wrap gap-2 mt-2">
+          <span className={"pill "+(F.seasons.length===4?'pill-active':'')} onClick={()=>upd('seasons',SEASONS.slice())}>All</span>
+          {SEASONS.map(s=>(
+            <span key={s} className={"pill "+(F.seasons.includes(s)?'pill-active':'')} onClick={()=>toggleArr('seasons',s)}>{s}</span>
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-4">
+        <label className="text-xs text-slate-400 font-semibold uppercase tracking-wide">Month</label>
+        <div className="grid grid-cols-3 gap-1 mt-2">
+          {MONTHS.map((m,i)=>{
+            const idx=i+1, dim=irrelevantMonths.has(idx);
+            return (
+              <label key={m} className="flex items-center gap-1 text-xs" style={{opacity:dim?0.3:1, color:'#cbd5e1'}}>
+                <input type="checkbox" checked={F.months.includes(idx)} onChange={()=>toggleArr('months',idx)} disabled={dim}/>{m}
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mb-4">
+        <label className="text-xs text-slate-400 font-semibold uppercase tracking-wide">Decade</label>
+        <div className="flex flex-wrap gap-2 mt-2">
+          {[1940,1950,1960,1970,1980,1990,2000,2010,2020].map(d=>(
+            <span key={d} className={"pill "+(F.decades.includes(d)?'pill-active':'')} onClick={()=>toggleArr('decades',d)}>{d}s</span>
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-4">
+        <label className="text-xs text-slate-400 font-semibold uppercase tracking-wide">Min Daily High (°F)</label>
+        <div className="flex justify-between text-sm mt-1 text-white"><span>{F.tmaxMin}</span><span>{F.tmaxMax}</span></div>
+        <input type="range" min="-10" max="110" value={F.tmaxMin} onChange={e=>upd('tmaxMin',Math.min(+e.target.value,F.tmaxMax))} className="w-full"/>
+        <input type="range" min="-10" max="110" value={F.tmaxMax} onChange={e=>upd('tmaxMax',Math.max(+e.target.value,F.tmaxMin))} className="w-full"/>
+      </div>
+
+      <div className="mb-4">
+        <label className="text-xs text-slate-400 font-semibold uppercase tracking-wide">Precip Type</label>
+        <div className="flex flex-col gap-1 mt-2 text-sm text-slate-200">
+          {['All','Rain','Snow','Mixed'].map(t=>(
+            <label key={t} className="flex items-center gap-2"><input type="radio" checked={F.precipType===t} onChange={()=>upd('precipType',t)}/>{t==='All'?'All':t+' Only'}</label>
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-4">
+        <label className="text-xs text-slate-400 font-semibold uppercase tracking-wide">Precip Amount</label>
+        <div className="flex flex-wrap gap-2 mt-2">
+          {['None','Light','Moderate','Heavy'].map(a=>(
+            <span key={a} className={"pill "+(F.precipAmount.includes(a)?'pill-active':'')} onClick={()=>toggleArr('precipAmount',a)}>{a}</span>
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-4">
+        <label className="flex items-center gap-2 text-sm text-slate-200">
+          <input type="checkbox" checked={F.extremeOnly} onChange={e=>upd('extremeOnly',e.target.checked)}/>
+          Extreme Events Only (top/bottom 5%)
+        </label>
+      </div>
+
+      <div className="mb-4">
+        <label className="text-xs text-slate-400 font-semibold uppercase tracking-wide">Day of Week</label>
+        <div className="flex flex-col gap-1 mt-2 text-sm text-slate-200">
+          {['All','Weekday','Weekend'].map(d=>(
+            <label key={d} className="flex items-center gap-2"><input type="radio" checked={F.dayOfWeek===d} onChange={()=>upd('dayOfWeek',d)}/>{d}</label>
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-2">
+        <label className="text-xs text-slate-400 font-semibold uppercase tracking-wide">Climatological Period</label>
+        <div className="flex flex-col gap-1 mt-2 text-sm text-slate-200">
+          {['All','Pre-1980','Post-1980','Last 30 Years'].map(p=>(
+            <label key={p} className="flex items-center gap-2"><input type="radio" checked={F.period===p} onChange={()=>upd('period',p)}/>{p}</label>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- MAIN APP ---------- */
+function App() {
+  const [raw,setRaw] = useState(null);
+  const [tab,setTab] = useState('Overview');
+  const [collapsed,setCollapsed] = useState(false);
+  const [aggMode,setAggMode] = useState('Year');
+  const [page,setPage] = useState(0);
+
+  const defaultFilters = {
+    yearMin:1940, yearMax:2026,
+    seasons:SEASONS.slice(),
+    months:Array.from({length:12},(_,i)=>i+1),
+    decades:[1940,1950,1960,1970,1980,1990,2000,2010,2020],
+    tmaxMin:-10, tmaxMax:110,
+    precipType:'All',
+    precipAmount:['None','Light','Moderate','Heavy'],
+    extremeOnly:false,
+    dayOfWeek:'All',
+    period:'All'
+  };
+  const [filters,setFilters] = useState(defaultFilters);
+  const reset = ()=>setFilters(defaultFilters);
+
+  useEffect(()=>{
+    fetch('./charlotte-weather.json').then(r=>r.json()).then(d=>{
+      // pre-enrich
+      const enriched = d.map(rec=>{
+        const dt = new Date(rec.date+'T00:00:00');
+        const y=dt.getFullYear(), m=dt.getMonth()+1;
+        const tavg = rec.tavg!=null ? rec.tavg : ((rec.tmax!=null && rec.tmin!=null) ? (rec.tmax+rec.tmin)/2 : null);
+        const cls = classifyPrcp(rec.prcp||0, rec.snow||0);
+        const dow = dt.getDay();
+        return {...rec, tavg, year:y, month:m, decade:Math.floor(y/10)*10, season:getSeason(m),
+                type:cls.type, amount:cls.amount, dow, isWeekend: (dow===0||dow===6)};
+      });
+      setRaw(enriched);
+    });
+  },[]);
+
+  // Compute extreme thresholds on raw (so threshold is stable)
+  const extremes = useMemo(()=>{
+    if (!raw) return null;
+    const tmaxArr=raw.map(r=>r.tmax).filter(v=>v!=null).sort((a,b)=>a-b);
+    const prcpArr=raw.map(r=>r.prcp).filter(v=>v!=null && v>0).sort((a,b)=>a-b);
+    return {
+      tmaxHi: tmaxArr[Math.floor(tmaxArr.length*0.95)],
+      tmaxLo: tmaxArr[Math.floor(tmaxArr.length*0.05)],
+      prcpHi: prcpArr[Math.floor(prcpArr.length*0.95)]
+    };
+  },[raw]);
+
+  const filtered = useMemo(()=>{
+    if (!raw) return [];
+    return raw.filter(r=>{
+      if (r.year<filters.yearMin || r.year>filters.yearMax) return false;
+      if (!filters.seasons.includes(r.season)) return false;
+      if (!filters.months.includes(r.month)) return false;
+      if (!filters.decades.includes(r.decade)) return false;
+      if (r.tmax==null || r.tmax<filters.tmaxMin || r.tmax>filters.tmaxMax) return false;
+      if (filters.precipType!=='All' && r.type!==filters.precipType) return false;
+      if (!filters.precipAmount.includes(r.amount)) return false;
+      if (filters.extremeOnly && extremes) {
+        const isEx = (r.tmax>=extremes.tmaxHi) || (r.tmax<=extremes.tmaxLo) || (r.prcp>=extremes.prcpHi);
+        if (!isEx) return false;
+      }
+      if (filters.dayOfWeek==='Weekday' && r.isWeekend) return false;
+      if (filters.dayOfWeek==='Weekend' && !r.isWeekend) return false;
+      if (filters.period==='Pre-1980' && r.year>=1980) return false;
+      if (filters.period==='Post-1980' && r.year<1980) return false;
+      if (filters.period==='Last 30 Years' && r.year<1996) return false;
+      return true;
+    });
+  },[raw,filters,extremes]);
+
+  if (!raw) return <div className="flex items-center justify-center h-screen text-slate-400">Loading Charlotte weather data...</div>;
+
+  return (
+    <div className="min-h-screen p-4" style={{background:COLORS.bg}}>
+      <Header total={raw.length} shown={filtered.length}/>
+      <div className="flex gap-4 mt-4 items-start">
+        <Sidebar filters={filters} setFilters={setFilters} reset={reset} collapsed={collapsed} setCollapsed={setCollapsed}/>
+        <div className="flex-1 min-w-0">
+          <div className="card p-2 mb-4 flex gap-2 flex-wrap">
+            {['Overview','Temperature','Precipitation','Trends','🚨 Drought'].map(t=>(
+              <div key={t} className={"tab-btn "+(tab===t?'tab-active':'')} onClick={()=>setTab(t)}
+                style={t==='🚨 Drought' && tab!==t ? {color:'#f43f5e',borderColor:'rgba(244,63,94,.3)'} : {}}>{t}</div>
+            ))}
+          </div>
+          {filtered.length===0 ? (
+            <div className="card p-12 text-center text-slate-400">No records match the current filters. Try resetting.</div>
+          ) : (
+            <>
+              {tab==='Overview' && <OverviewTab data={filtered}/>}
+              {tab==='Temperature' && <TempTab data={filtered}/>}
+              {tab==='Precipitation' && <PrecipTab data={filtered}/>}
+              {tab==='Trends' && <TrendsTab data={filtered} aggMode={aggMode} setAggMode={setAggMode} page={page} setPage={setPage}/>}
+              {tab==='🚨 Drought' && <DroughtTab allData={raw}/>}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Header({total,shown}) {
+  return (
+    <div className="card p-5 flex justify-between items-center">
+      <div>
+        <h1 className="text-2xl font-bold text-white tracking-tight">Charlotte, NC — Historical Weather</h1>
+        <p className="text-sm text-slate-400 mt-1">Daily observations, 1940 – 2026 · NOAA-style climate record</p>
+      </div>
+      <div className="text-right">
+        <div className="text-3xl font-bold" style={{background:'linear-gradient(90deg,#3b82f6,#06b6d4)',WebkitBackgroundClip:'text',color:'transparent'}}>
+          {shown.toLocaleString()}
+        </div>
+        <div className="text-xs text-slate-400">of {total.toLocaleString()} records</div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- OVERVIEW ---------- */
+function OverviewTab({data}) {
+  const kpis = useMemo(()=>{
+    const highs=data.map(d=>d.tmax).filter(v=>v!=null);
+    const avgHigh = highs.reduce((a,b)=>a+b,0)/highs.length;
+    const years = {}; data.forEach(d=>{ years[d.year]=(years[d.year]||0)+(d.prcp||0); });
+    const yArr=Object.values(years);
+    const annualPrcp = yArr.reduce((a,b)=>a+b,0)/yArr.length;
+    const snowDaysByYear={}; data.forEach(d=>{ if ((d.snow||0)>0) snowDaysByYear[d.year]=(snowDaysByYear[d.year]||0)+1; });
+    const snowYears=Object.values(snowDaysByYear);
+    const avgSnowDays = snowYears.length? snowYears.reduce((a,b)=>a+b,0)/Object.keys(years).length:0;
+    let recH=null;
+    data.forEach(d=>{ if (d.tmax!=null && (!recH || d.tmax>recH.tmax)) recH=d; });
+    return {avgHigh, annualPrcp, avgSnowDays, recH};
+  },[data]);
+
+  const climate = useMemo(()=>{
+    const yearAvg={};
+    data.forEach(d=>{ if (d.tavg!=null) { (yearAvg[d.year]=yearAvg[d.year]||[]).push(d.tavg); } });
+    const baseYears = Object.keys(yearAvg).filter(y=>+y>=1940 && +y<=1980);
+    const baseAll = baseYears.flatMap(y=>yearAvg[y]);
+    const baseline = baseAll.length? baseAll.reduce((a,b)=>a+b,0)/baseAll.length : 60;
+    return Object.keys(yearAvg).sort().map(y=>{
+      const arr=yearAvg[y]; const mean=arr.reduce((a,b)=>a+b,0)/arr.length;
+      return {year:+y, anomaly:+(mean-baseline).toFixed(2)};
+    });
+  },[data]);
+
+  const monthlyTemp = useMemo(()=>{
+    const acc=Array.from({length:12},()=>({sum:0,n:0,hi:0,hn:0,lo:0,ln:0}));
+    data.forEach(d=>{ const i=d.month-1;
+      if (d.tavg!=null){acc[i].sum+=d.tavg;acc[i].n++;}
+      if (d.tmax!=null){acc[i].hi+=d.tmax;acc[i].hn++;}
+      if (d.tmin!=null){acc[i].lo+=d.tmin;acc[i].ln++;}
+    });
+    return acc.map((a,i)=>({month:MONTHS[i], avg:a.n?+(a.sum/a.n).toFixed(1):0, high:a.hn?+(a.hi/a.hn).toFixed(1):0, low:a.ln?+(a.lo/a.ln).toFixed(1):0}));
+  },[data]);
+
+  const monthlyPrecip = useMemo(()=>{
+    const acc=Array.from({length:12},()=>({rain:0,snow:0,n:0,years:new Set()}));
+    data.forEach(d=>{ const i=d.month-1; acc[i].rain+=(d.prcp||0)-((d.snow||0)*0.1); acc[i].snow+=(d.snow||0)*0.1; acc[i].years.add(d.year); });
+    return acc.map((a,i)=>{
+      const ny=Math.max(1,a.years.size);
+      return {month:MONTHS[i], rain:+(Math.max(0,a.rain)/ny).toFixed(2), snow:+(Math.max(0,a.snow)/ny).toFixed(2)};
+    });
+  },[data]);
+
+  const seasonPrecip = useMemo(()=>{
+    const acc={Spring:0,Summer:0,Fall:0,Winter:0};
+    data.forEach(d=>{ acc[d.season]+=(d.prcp||0); });
+    return Object.entries(acc).map(([name,value])=>({name,value:+value.toFixed(2)}));
+  },[data]);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard label="Avg High Temp" value={fmt(kpis.avgHigh,1)+'°F'} accent={COLORS.amber} sub="Mean of daily highs"/>
+        <KpiCard label="Avg Annual Precip" value={fmt(kpis.annualPrcp,1)+' in'} accent={COLORS.cyan} sub="Per year"/>
+        <KpiCard label="Avg Snow Days / Yr" value={fmt(kpis.avgSnowDays,1)} accent={COLORS.violet} sub="Days with snow > 0"/>
+        <KpiCard label="Record High" value={kpis.recH? kpis.recH.tmax+'°F':'–'} accent={COLORS.rose} sub={kpis.recH? kpis.recH.date:''}/>
+      </div>
+
+      <Panel title="Climate Anomaly — Yearly Avg Temp Deviation from 1940–1980 Baseline">
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={climate} margin={{top:10,right:20,left:0,bottom:0}}>
+            <defs><linearGradient id="anomGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={COLORS.rose}/><stop offset="100%" stopColor={COLORS.cyan}/></linearGradient></defs>
+            <CartesianGrid stroke={COLORS.border} strokeDasharray="3 3"/>
+            <XAxis dataKey="year" stroke={COLORS.dim}/>
+            <YAxis stroke={COLORS.dim} unit="°F"/>
+            <Tooltip content={<CustomTooltip unit="°F"/>}/>
+            <ReferenceLine y={0} stroke={COLORS.dim} strokeDasharray="4 4"/>
+            <Line type="monotone" dataKey="anomaly" name="Anomaly" stroke="url(#anomGrad)" strokeWidth={2.5} dot={false}/>
+          </LineChart>
+        </ResponsiveContainer>
+      </Panel>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Panel title="Monthly Average Temperature">
+          <ResponsiveContainer width="100%" height={280}>
+            <AreaChart data={monthlyTemp}>
+              <defs>
+                <linearGradient id="hiG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={COLORS.amber} stopOpacity={0.7}/><stop offset="100%" stopColor={COLORS.amber} stopOpacity={0.05}/></linearGradient>
+                <linearGradient id="loG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={COLORS.cyan} stopOpacity={0.7}/><stop offset="100%" stopColor={COLORS.cyan} stopOpacity={0.05}/></linearGradient>
+              </defs>
+              <CartesianGrid stroke={COLORS.border} strokeDasharray="3 3"/>
+              <XAxis dataKey="month" stroke={COLORS.dim}/>
+              <YAxis stroke={COLORS.dim} unit="°"/>
+              <Tooltip content={<CustomTooltip unit="°F"/>}/>
+              <Legend wrapperStyle={{fontSize:12}}/>
+              <Area type="monotone" dataKey="high" stroke={COLORS.amber} fill="url(#hiG)" name="Avg High"/>
+              <Area type="monotone" dataKey="low" stroke={COLORS.cyan} fill="url(#loG)" name="Avg Low"/>
+            </AreaChart>
+          </ResponsiveContainer>
+        </Panel>
+
+        <Panel title="Monthly Precipitation — Rain & Snow">
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={monthlyPrecip}>
+              <CartesianGrid stroke={COLORS.border} strokeDasharray="3 3"/>
+              <XAxis dataKey="month" stroke={COLORS.dim}/>
+              <YAxis stroke={COLORS.dim} unit=" in"/>
+              <Tooltip content={<CustomTooltip unit=" in"/>}/>
+              <Legend wrapperStyle={{fontSize:12}}/>
+              <Bar dataKey="rain" stackId="p" fill={COLORS.blue} name="Rain"/>
+              <Bar dataKey="snow" stackId="p" fill={COLORS.violet} name="Snow (water eq)"/>
+            </BarChart>
+          </ResponsiveContainer>
+        </Panel>
+      </div>
+
+      <Panel title="Precipitation by Season">
+        <DonutChart data={seasonPrecip}/>
+      </Panel>
+    </div>
+  );
+}
+
+function KpiCard({label,value,sub,accent}) {
+  return (
+    <div className="kpi">
+      <div className="text-xs uppercase tracking-wider text-slate-400">{label}</div>
+      <div className="text-3xl font-bold mt-2" style={{color:accent}}>{value}</div>
+      <div className="text-xs text-slate-500 mt-1">{sub}</div>
+    </div>
+  );
+}
+
+function Panel({title,children,extra}) {
+  return (
+    <div className="card">
+      <div className="card-header flex justify-between items-center">
+        <h3 className="text-sm font-semibold text-white tracking-wide">{title}</h3>
+        {extra}
+      </div>
+      <div className="p-4">{children}</div>
+    </div>
+  );
+}
+
+/* ---------- TEMPERATURE ---------- */
+function TempTab({data}) {
+  const yearly = useMemo(()=>{
+    const m={};
+    data.forEach(d=>{ const y=d.year; (m[y]=m[y]||{hi:[],lo:[],av:[]});
+      if (d.tmax!=null) m[y].hi.push(d.tmax);
+      if (d.tmin!=null) m[y].lo.push(d.tmin);
+      if (d.tavg!=null) m[y].av.push(d.tavg);
+    });
+    return Object.keys(m).sort().map(y=>{
+      const o=m[y]; const mean=a=>a.length? a.reduce((x,b)=>x+b,0)/a.length:null;
+      return {year:+y, high:+(mean(o.hi)||0).toFixed(1), low:+(mean(o.lo)||0).toFixed(1), avg:+(mean(o.av)||0).toFixed(1)};
+    });
+  },[data]);
+
+  const byMonth = useMemo(()=>{
+    const acc=Array.from({length:12},()=>({s:0,n:0}));
+    data.forEach(d=>{ if (d.tavg!=null){acc[d.month-1].s+=d.tavg; acc[d.month-1].n++;} });
+    return acc.map((a,i)=>({month:MONTHS[i], avg:a.n?+(a.s/a.n).toFixed(1):0}));
+  },[data]);
+
+  // Sample scatter to keep performant
+  const scatter = useMemo(()=>{
+    const step = Math.max(1, Math.floor(data.length/2500));
+    return data.filter((_,i)=>i%step===0).filter(d=>d.tmax!=null && d.tmin!=null)
+      .map(d=>({tmax:d.tmax, tmin:d.tmin, season:d.season}));
+  },[data]);
+  const scatterBySeason = useMemo(()=>{
+    return SEASONS.map(s=>({season:s, pts:scatter.filter(p=>p.season===s)}));
+  },[scatter]);
+
+  const hottest = useMemo(()=>[...data].filter(d=>d.tmax!=null).sort((a,b)=>b.tmax-a.tmax).slice(0,10),[data]);
+  const coldest = useMemo(()=>[...data].filter(d=>d.tmin!=null).sort((a,b)=>a.tmin-b.tmin).slice(0,10),[data]);
+
+  return (
+    <div className="space-y-4">
+      <Panel title="Yearly Avg High / Low / Mean">
+        <ResponsiveContainer width="100%" height={320}>
+          <LineChart data={yearly}>
+            <CartesianGrid stroke={COLORS.border} strokeDasharray="3 3"/>
+            <XAxis dataKey="year" stroke={COLORS.dim}/>
+            <YAxis stroke={COLORS.dim} unit="°"/>
+            <Tooltip content={<CustomTooltip unit="°F"/>}/>
+            <Legend wrapperStyle={{fontSize:12}}/>
+            <Line type="monotone" dataKey="high" stroke={COLORS.amber} strokeWidth={2} dot={false} name="High"/>
+            <Line type="monotone" dataKey="avg" stroke={COLORS.emerald} strokeWidth={2} dot={false} name="Mean"/>
+            <Line type="monotone" dataKey="low" stroke={COLORS.cyan} strokeWidth={2} dot={false} name="Low"/>
+          </LineChart>
+        </ResponsiveContainer>
+      </Panel>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Panel title="Avg Temp by Month">
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={byMonth}>
+              <CartesianGrid stroke={COLORS.border} strokeDasharray="3 3"/>
+              <XAxis dataKey="month" stroke={COLORS.dim}/>
+              <YAxis stroke={COLORS.dim} unit="°"/>
+              <Tooltip content={<CustomTooltip unit="°F"/>}/>
+              <Bar dataKey="avg" name="Avg Temp">
+                {byMonth.map((d,i)=>{
+                  const t=d.avg; const c = t>75? COLORS.rose : t>60? COLORS.amber : t>45? COLORS.emerald : COLORS.cyan;
+                  return <Cell key={i} fill={c}/>;
+                })}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </Panel>
+
+        <Panel title="Daily Tmax vs Tmin by Season">
+          <ResponsiveContainer width="100%" height={280}>
+            <ScatterChart>
+              <CartesianGrid stroke={COLORS.border} strokeDasharray="3 3"/>
+              <XAxis dataKey="tmin" type="number" stroke={COLORS.dim} name="Tmin" unit="°"/>
+              <YAxis dataKey="tmax" type="number" stroke={COLORS.dim} name="Tmax" unit="°"/>
+              <Tooltip cursor={{strokeDasharray:'3 3'}} content={<CustomTooltip unit="°F"/>}/>
+              <Legend wrapperStyle={{fontSize:12}}/>
+              {scatterBySeason.map(s=>(
+                <Scatter key={s.season} name={s.season} data={s.pts} fill={SEASON_COLORS[s.season]} fillOpacity={0.5}/>
+              ))}
+            </ScatterChart>
+          </ResponsiveContainer>
+        </Panel>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Panel title="Top 10 Hottest Days">
+          <table className="w-full">
+            <thead><tr><th className="text-left">Date</th><th className="text-right">High °F</th><th className="text-right">Low °F</th></tr></thead>
+            <tbody>{hottest.map((d,i)=>(<tr key={i}><td>{d.date}</td><td className="text-right" style={{color:COLORS.rose,fontWeight:600}}>{d.tmax}</td><td className="text-right">{d.tmin}</td></tr>))}</tbody>
+          </table>
+        </Panel>
+        <Panel title="Top 10 Coldest Days">
+          <table className="w-full">
+            <thead><tr><th className="text-left">Date</th><th className="text-right">Low °F</th><th className="text-right">High °F</th></tr></thead>
+            <tbody>{coldest.map((d,i)=>(<tr key={i}><td>{d.date}</td><td className="text-right" style={{color:COLORS.cyan,fontWeight:600}}>{d.tmin}</td><td className="text-right">{d.tmax}</td></tr>))}</tbody>
+          </table>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- PRECIPITATION ---------- */
+function PrecipTab({data}) {
+  const rolling12 = useMemo(()=>{
+    // group by year-month
+    const m={};
+    data.forEach(d=>{
+      const k=`${d.year}-${String(d.month).padStart(2,'0')}`;
+      m[k]=(m[k]||0)+(d.prcp||0);
+    });
+    const keys=Object.keys(m).sort();
+    const out=[]; let win=[];
+    keys.forEach(k=>{
+      win.push(m[k]); if (win.length>12) win.shift();
+      out.push({period:k, rolling:+win.reduce((a,b)=>a+b,0).toFixed(2)});
+    });
+    // Reduce density for x-axis labels
+    return out;
+  },[data]);
+
+  const byDecadeMonth = useMemo(()=>{
+    const decades=[...new Set(data.map(d=>d.decade))].sort();
+    const acc=Array.from({length:12},(_,i)=>({month:MONTHS[i]}));
+    decades.forEach(dec=>{
+      const sumYearCount=Array.from({length:12},()=>({s:0,years:new Set()}));
+      data.filter(d=>d.decade===dec).forEach(d=>{
+        sumYearCount[d.month-1].s+=(d.prcp||0);
+        sumYearCount[d.month-1].years.add(d.year);
+      });
+      sumYearCount.forEach((o,i)=>{
+        const ny=Math.max(1,o.years.size);
+        acc[i][dec+'s']=+(o.s/ny).toFixed(2);
+      });
+    });
+    return {data:acc, decades};
+  },[data]);
+
+  const yearBubble = useMemo(()=>{
+    const m={};
+    data.forEach(d=>{
+      (m[d.year]=m[d.year]||{t:[],p:0,sd:0});
+      if (d.tavg!=null) m[d.year].t.push(d.tavg);
+      m[d.year].p+=(d.prcp||0);
+      if ((d.snow||0)>0) m[d.year].sd++;
+    });
+    return Object.keys(m).map(y=>{
+      const o=m[y]; const mean=o.t.length? o.t.reduce((a,b)=>a+b,0)/o.t.length:0;
+      return {year:+y, temp:+mean.toFixed(1), prcp:+o.p.toFixed(2), snowDays:o.sd};
+    });
+  },[data]);
+
+  const monthTreemap = useMemo(()=>{
+    const acc=Array.from({length:12},()=>({s:0,years:new Set()}));
+    data.forEach(d=>{ acc[d.month-1].s+=(d.prcp||0); acc[d.month-1].years.add(d.year); });
+    return acc.map((o,i)=>({month:MONTHS[i], avg:+(o.s/Math.max(1,o.years.size)).toFixed(2)}));
+  },[data]);
+
+  const BubbleShape = (props)=>{
+    const {cx,cy,payload} = props;
+    const r = Math.min(28, 3 + Math.sqrt(payload.snowDays||0)*2.5);
+    return <circle cx={cx} cy={cy} r={r} fill={COLORS.violet} fillOpacity={0.55} stroke={COLORS.violet} strokeWidth={1}/>;
+  };
+
+  return (
+    <div className="space-y-4">
+      <Panel title="Rolling 12-Month Precipitation Total">
+        <ResponsiveContainer width="100%" height={300}>
+          <AreaChart data={rolling12}>
+            <defs><linearGradient id="rolG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={COLORS.cyan} stopOpacity={0.7}/><stop offset="100%" stopColor={COLORS.cyan} stopOpacity={0.05}/></linearGradient></defs>
+            <CartesianGrid stroke={COLORS.border} strokeDasharray="3 3"/>
+            <XAxis dataKey="period" stroke={COLORS.dim} interval={Math.floor(rolling12.length/12)} tick={{fontSize:11}}/>
+            <YAxis stroke={COLORS.dim} unit=" in"/>
+            <Tooltip content={<CustomTooltip unit=" in"/>}/>
+            <Area type="monotone" dataKey="rolling" stroke={COLORS.cyan} fill="url(#rolG)" name="12-mo Total"/>
+          </AreaChart>
+        </ResponsiveContainer>
+      </Panel>
+
+      <Panel title="Avg Monthly Precip by Decade (Stacked)">
+        <ResponsiveContainer width="100%" height={320}>
+          <BarChart data={byDecadeMonth.data}>
+            <CartesianGrid stroke={COLORS.border} strokeDasharray="3 3"/>
+            <XAxis dataKey="month" stroke={COLORS.dim}/>
+            <YAxis stroke={COLORS.dim} unit=" in"/>
+            <Tooltip content={<CustomTooltip unit=" in"/>}/>
+            <Legend wrapperStyle={{fontSize:11}}/>
+            {byDecadeMonth.decades.map((dec,i)=>(
+              <Bar key={dec} dataKey={dec+'s'} stackId="d" fill={DECADE_COLORS[i%DECADE_COLORS.length]}/>
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </Panel>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Panel title="Yearly Climate Bubble — Temp vs Precip (size = snow days)">
+          <ResponsiveContainer width="100%" height={320}>
+            <ScatterChart margin={{top:10,right:20,bottom:10,left:0}}>
+              <CartesianGrid stroke={COLORS.border} strokeDasharray="3 3"/>
+              <XAxis dataKey="temp" name="Avg Temp" type="number" stroke={COLORS.dim} unit="°F" domain={['auto','auto']}/>
+              <YAxis dataKey="prcp" name="Annual Precip" type="number" stroke={COLORS.dim} unit=" in"/>
+              <Tooltip cursor={{strokeDasharray:'3 3'}} content={({active,payload})=>{
+                if (!active || !payload || !payload.length) return null;
+                const d=payload[0].payload;
+                return <div className="tooltip-box"><div style={{fontWeight:600,color:'#fff'}}>{d.year}</div>
+                  <div style={{color:COLORS.amber}}>Avg Temp: {d.temp}°F</div>
+                  <div style={{color:COLORS.cyan}}>Precip: {d.prcp} in</div>
+                  <div style={{color:COLORS.violet}}>Snow Days: {d.snowDays}</div></div>;
+              }}/>
+              <Scatter data={yearBubble} shape={<BubbleShape/>}/>
+            </ScatterChart>
+          </ResponsiveContainer>
+        </Panel>
+
+        <Panel title="Monthly Avg Precip Treemap">
+          <PlotlyTreemap data={monthTreemap}/>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- TRENDS ---------- */
+function TrendsTab({data, aggMode, setAggMode, page, setPage}) {
+  const seasonDecade = useMemo(()=>{
+    const decades=[...new Set(data.map(d=>d.decade))].sort();
+    return decades.map(dec=>{
+      const row={decade:dec+'s'};
+      SEASONS.forEach(s=>{
+        const sub=data.filter(d=>d.decade===dec && d.season===s);
+        const temps=sub.map(d=>d.tavg).filter(v=>v!=null);
+        const p=sub.reduce((a,b)=>a+(b.prcp||0),0);
+        const years=new Set(sub.map(d=>d.year));
+        row[s+'_T']=temps.length? +(temps.reduce((a,b)=>a+b,0)/temps.length).toFixed(1):'–';
+        row[s+'_P']=years.size? +(p/years.size).toFixed(1):'–';
+      });
+      return row;
+    });
+  },[data]);
+
+  const aggregated = useMemo(()=>{
+    const buckets={};
+    data.forEach(d=>{
+      let k;
+      if (aggMode==='Day') k=d.date;
+      else if (aggMode==='Month') k=`${d.year}-${String(d.month).padStart(2,'0')}`;
+      else if (aggMode==='Quarter') k=`${d.year}-Q${Math.ceil(d.month/3)}`;
+      else k=String(d.year);
+      (buckets[k]=buckets[k]||{key:k,hi:[],lo:[],av:[],p:0,snow:0,n:0});
+      if (d.tmax!=null) buckets[k].hi.push(d.tmax);
+      if (d.tmin!=null) buckets[k].lo.push(d.tmin);
+      if (d.tavg!=null) buckets[k].av.push(d.tavg);
+      buckets[k].p+=(d.prcp||0);
+      buckets[k].snow+=(d.snow||0);
+      buckets[k].n++;
+    });
+    return Object.values(buckets).sort((a,b)=>a.key<b.key?-1:1).map(b=>({
+      key:b.key, n:b.n,
+      high: b.hi.length? +(b.hi.reduce((a,b)=>a+b,0)/b.hi.length).toFixed(1):'–',
+      low: b.lo.length? +(b.lo.reduce((a,b)=>a+b,0)/b.lo.length).toFixed(1):'–',
+      avg: b.av.length? +(b.av.reduce((a,b)=>a+b,0)/b.av.length).toFixed(1):'–',
+      prcp:+b.p.toFixed(2), snow:+b.snow.toFixed(2)
+    }));
+  },[data,aggMode]);
+
+  const perPage=50;
+  const pages=Math.max(1,Math.ceil(aggregated.length/perPage));
+  const curPage=Math.min(page,pages-1);
+  const pageRows=aggregated.slice(curPage*perPage,(curPage+1)*perPage);
+
+  const mapStats = useMemo(()=>{
+    const hi=data.map(d=>d.tmax).filter(v=>v!=null);
+    const lo=data.map(d=>d.tmin).filter(v=>v!=null);
+    const years={}; data.forEach(d=>{years[d.year]=(years[d.year]||0)+(d.prcp||0);});
+    const yArr=Object.values(years);
+    return {
+      avgHigh: hi.length? hi.reduce((a,b)=>a+b,0)/hi.length:0,
+      avgLow: lo.length? lo.reduce((a,b)=>a+b,0)/lo.length:0,
+      annualPrcp: yArr.length? yArr.reduce((a,b)=>a+b,0)/yArr.length:0
+    };
+  },[data]);
+
+  return (
+    <div className="space-y-4">
+      <Panel title="Avg Temp (°F) & Precip (in) by Season & Decade">
+        <div className="overflow-x-auto scroll-thin">
+          <table className="w-full">
+            <thead>
+              <tr>
+                <th rowSpan="2" className="text-left">Decade</th>
+                {SEASONS.map(s=><th key={s} colSpan="2" className="text-center" style={{color:SEASON_COLORS[s]}}>{s}</th>)}
+              </tr>
+              <tr>{SEASONS.flatMap(s=>[<th key={s+'t'} className="text-right">Temp</th>,<th key={s+'p'} className="text-right">Precip</th>])}</tr>
+            </thead>
+            <tbody>
+              {seasonDecade.map((r,i)=>(
+                <tr key={i}>
+                  <td style={{fontWeight:600,color:'#fff'}}>{r.decade}</td>
+                  {SEASONS.flatMap(s=>[
+                    <td key={s+'t'} className="text-right" style={{color:COLORS.amber}}>{r[s+'_T']}°</td>,
+                    <td key={s+'p'} className="text-right" style={{color:COLORS.cyan}}>{r[s+'_P']}</td>
+                  ])}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
+      <Panel title="Tabular Data" extra={
+        <div className="flex gap-2">
+          {['Day','Month','Quarter','Year'].map(m=>(
+            <button key={m} className={"pill "+(aggMode===m?'pill-active':'')} onClick={()=>{setAggMode(m);setPage(0);}}>{m}</button>
+          ))}
+        </div>
+      }>
+        <div className="overflow-x-auto scroll-thin">
+          <table className="w-full">
+            <thead><tr>
+              <th className="text-left">{aggMode}</th>
+              <th className="text-right">Records</th>
+              <th className="text-right">Avg High °F</th>
+              <th className="text-right">Avg Low °F</th>
+              <th className="text-right">Avg Mean °F</th>
+              <th className="text-right">Total Precip (in)</th>
+              <th className="text-right">Total Snow (in)</th>
+            </tr></thead>
+            <tbody>
+              {pageRows.map((r,i)=>(
+                <tr key={i}>
+                  <td style={{color:'#fff'}}>{r.key}</td>
+                  <td className="text-right text-slate-400">{r.n}</td>
+                  <td className="text-right" style={{color:COLORS.amber}}>{r.high}</td>
+                  <td className="text-right" style={{color:COLORS.cyan}}>{r.low}</td>
+                  <td className="text-right" style={{color:COLORS.emerald}}>{r.avg}</td>
+                  <td className="text-right">{r.prcp}</td>
+                  <td className="text-right" style={{color:COLORS.violet}}>{r.snow}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex justify-between items-center mt-3 text-sm text-slate-400">
+          <div>Showing {curPage*perPage+1}–{Math.min((curPage+1)*perPage,aggregated.length)} of {aggregated.length}</div>
+          <div className="flex gap-2">
+            <button className="pill" onClick={()=>setPage(Math.max(0,curPage-1))} disabled={curPage===0}>← Prev</button>
+            <span className="px-2 py-1 text-white">Page {curPage+1} / {pages}</span>
+            <button className="pill" onClick={()=>setPage(Math.min(pages-1,curPage+1))} disabled={curPage>=pages-1}>Next →</button>
+          </div>
+        </div>
+      </Panel>
+
+      <Panel title="Charlotte Station Location">
+        <PlotlyMap stats={mapStats}/>
+      </Panel>
+    </div>
+  );
+}
+
+/* ============================================================
+   DROUGHT TAB
+   ============================================================ */
+function DroughtTab({ allData }) {
+  // 1991-2020 monthly normals
+  const normals = useMemo(() => {
+    const byMY = {};
+    for (const d of allData) {
+      const y = +d.date.slice(0,4);
+      if (y < 1991 || y > 2020) continue;
+      const m = +d.date.slice(5,7);
+      const k = `${y}-${m}`;
+      byMY[k] = (byMY[k] || 0) + (d.prcp || 0);
+    }
+    const sums = Array.from({length:12},()=>({total:0,n:0}));
+    for (const [k,v] of Object.entries(byMY)) {
+      const m = +k.split('-')[1] - 1;
+      sums[m].total += v; sums[m].n++;
+    }
+    return sums.map(s => s.n ? s.total / s.n : 0);
+  }, [allData]);
+
+  const normalAnnual = normals.reduce((a,b) => a+b, 0);
+
+  // Rolling 12-month actual vs normal (last 5 years for context)
+  const rollingData = useMemo(() => {
+    const sorted = [...allData].sort((a,b) => a.date.localeCompare(b.date));
+    const byMonth = {};
+    for (const d of sorted) {
+      const ym = d.date.slice(0,7);
+      byMonth[ym] = (byMonth[ym] || 0) + (d.prcp || 0);
+    }
+    const months = Object.keys(byMonth).sort().filter(m => m >= '2020-01');
+    const result = [];
+    for (let i = 11; i < months.length; i++) {
+      const window12 = months.slice(i-11, i+1);
+      const actual = window12.reduce((s,m) => s + (byMonth[m] || 0), 0);
+      const label = months[i];
+      result.push({ label, actual: +actual.toFixed(2), normal: +normalAnnual.toFixed(2), deficit: +(normalAnnual - actual).toFixed(2) });
+    }
+    return result;
+  }, [allData, normals]);
+
+  // Month-by-month comparison for current year (2025-06 through 2026-05 = last 12 months)
+  const monthCompare = useMemo(() => {
+    const now = '2026-05';
+    const months = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(2026, 4 - i, 1); // May 2026 back 11 months
+      const ym = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      months.push(ym);
+    }
+    const byMonth = {};
+    for (const d of allData) {
+      const ym = d.date.slice(0,7);
+      if (months.includes(ym)) byMonth[ym] = (byMonth[ym] || 0) + (d.prcp || 0);
+    }
+    return months.map(ym => {
+      const m = +ym.slice(5,7);
+      const actual = byMonth[ym] || 0;
+      const norm = normals[m-1];
+      return {
+        label: MONTHS[m-1] + " '" + ym.slice(2,4),
+        actual: +actual.toFixed(2),
+        normal: +norm.toFixed(2),
+        deficit: +(norm - actual).toFixed(2),
+        pct: norm > 0 ? Math.round((actual/norm)*100) : 0,
+      };
+    });
+  }, [allData, normals]);
+
+  // Cumulative deficit over last 12 months
+  const cumulativeDeficit = useMemo(() => {
+    let cumActual = 0, cumNormal = 0;
+    return monthCompare.map(m => {
+      cumActual += m.actual;
+      cumNormal += m.normal;
+      return { label: m.label, cumActual: +cumActual.toFixed(2), cumNormal: +cumNormal.toFixed(2), deficit: +(cumNormal - cumActual).toFixed(2) };
+    });
+  }, [monthCompare]);
+
+  const totalDeficit = cumulativeDeficit.length ? cumulativeDeficit[cumulativeDeficit.length-1].deficit : 0;
+  const totalActual  = cumulativeDeficit.length ? cumulativeDeficit[cumulativeDeficit.length-1].cumActual : 0;
+  const pctNormal = normalAnnual > 0 ? Math.round((totalActual/normalAnnual)*100) : 0;
+
+  // Consecutive dry days streak
+  const dryStreak = useMemo(() => {
+    const sorted = [...allData].filter(d => d.date >= '2025-01-01').sort((a,b)=>a.date.localeCompare(b.date));
+    let max = 0, cur = 0, maxEnd = '', curStart = '';
+    for (const d of sorted) {
+      if ((d.prcp||0) < 0.01) { if (cur===0) curStart=d.date; cur++; if (cur>max){max=cur;maxEnd=d.date;} }
+      else cur=0;
+    }
+    return { max, end: maxEnd };
+  }, [allData]);
+
+  // Historical drought context — worst 12-month periods
+  const worstYears = useMemo(() => {
+    const byMonth = {};
+    for (const d of allData) { const ym=d.date.slice(0,7); byMonth[ym]=(byMonth[ym]||0)+(d.prcp||0); }
+    const months = Object.keys(byMonth).sort();
+    const periods = [];
+    for (let i = 11; i < months.length; i++) {
+      const actual = months.slice(i-11,i+1).reduce((s,m)=>s+(byMonth[m]||0),0);
+      periods.push({ label: months[i-11]+' – '+months[i], actual: +actual.toFixed(2), deficit: +(normalAnnual-actual).toFixed(2) });
+    }
+    return periods.sort((a,b)=>a.actual-b.actual).slice(0,10);
+  }, [allData, normals]);
+
+  // Gauge meter component (SVG arc)
+  function PctGauge({ pct }) {
+    const r = 70, cx = 90, cy = 90;
+    const clamp = Math.max(0, Math.min(100, pct));
+    const angle = (clamp / 100) * 180 - 90; // -90 to 90 deg
+    const toRad = a => (a * Math.PI) / 180;
+    const arcPath = (startDeg, endDeg, radius) => {
+      const s = { x: cx + radius * Math.cos(toRad(startDeg)), y: cy + radius * Math.sin(toRad(startDeg)) };
+      const e = { x: cx + radius * Math.cos(toRad(endDeg)),   y: cy + radius * Math.sin(toRad(endDeg)) };
+      const large = endDeg - startDeg > 180 ? 1 : 0;
+      return `M ${s.x} ${s.y} A ${radius} ${radius} 0 ${large} 1 ${e.x} ${e.y}`;
+    };
+    const color = pct < 50 ? COLORS.rose : pct < 75 ? COLORS.amber : pct < 90 ? COLORS.cyan : COLORS.emerald;
+    const needleX = cx + (r-12) * Math.cos(toRad(angle - 90 + 180));
+    const needleY = cy + (r-12) * Math.sin(toRad(angle - 90 + 180));
+    return (
+      <svg width={180} height={110} style={{display:'block',margin:'0 auto'}}>
+        <path d={arcPath(180,360,r)} fill="none" stroke="#334155" strokeWidth={14} strokeLinecap="round"/>
+        <path d={arcPath(180, 180 + (clamp/100)*180, r)} fill="none" stroke={color} strokeWidth={14} strokeLinecap="round"/>
+        <line x1={cx} y1={cy} x2={needleX} y2={needleY} stroke="#e2e8f0" strokeWidth={2.5} strokeLinecap="round"/>
+        <circle cx={cx} cy={cy} r={5} fill="#e2e8f0"/>
+        <text x={cx} y={cy-16} textAnchor="middle" fill={color} fontSize={22} fontWeight={700}>{pct}%</text>
+        <text x={cx} y={cy-2} textAnchor="middle" fill="#94a3b8" fontSize={10}>of normal</text>
+        <text x={20} y={cy+18} fill="#94a3b8" fontSize={9}>0%</text>
+        <text x={148} y={cy+18} fill="#94a3b8" fontSize={9}>100%</text>
+      </svg>
+    );
+  }
+
+  const droughtLevel = pctNormal < 50 ? { label:'Exceptional Drought (D4)', color: COLORS.rose } :
+                       pctNormal < 65 ? { label:'Extreme Drought (D3)',      color: '#ef4444' } :
+                       pctNormal < 75 ? { label:'Severe Drought (D2)',        color: COLORS.amber } :
+                       pctNormal < 85 ? { label:'Moderate Drought (D1)',      color: '#eab308' } :
+                                        { label:'Abnormally Dry (D0)',         color: COLORS.cyan };
+
+  const lastRolling = rollingData[rollingData.length - 1];
+
+  return (
+    <div className="space-y-6">
+      {/* Alert banner */}
+      <div style={{background:'linear-gradient(90deg,rgba(244,63,94,.15),rgba(245,158,11,.1))',border:'1px solid rgba(244,63,94,.4)',borderRadius:12,padding:'14px 20px',display:'flex',alignItems:'center',gap:14}}>
+        <span style={{fontSize:28}}>🚨</span>
+        <div>
+          <div style={{color:COLORS.rose,fontWeight:700,fontSize:16}}>Severe Drought Conditions — Charlotte, NC</div>
+          <div style={{color:'#cbd5e1',fontSize:13,marginTop:3}}>
+            The past 12 months received only <strong style={{color:COLORS.amber}}>{fmt(totalActual,2)}"</strong> vs. a normal of <strong style={{color:COLORS.cyan}}>{fmt(normalAnnual,2)}"</strong> — a deficit of <strong style={{color:COLORS.rose}}>{fmt(totalDeficit,2)}"</strong> ({fmt(100-pctNormal,0)}% below normal). Based on NOAA 1991–2020 climatological normals.
+          </div>
+        </div>
+      </div>
+
+      {/* KPI row */}
+      <div className="grid grid-cols-2 gap-4" style={{gridTemplateColumns:'repeat(4,1fr)'}}>
+        {[
+          { label:'12-Month Deficit',  value: `-${fmt(totalDeficit,2)}"`, color: COLORS.rose,    sub: `vs ${fmt(normalAnnual,2)}" normal` },
+          { label:'% of Normal',       value: `${pctNormal}%`,             color: COLORS.amber,   sub: droughtLevel.label },
+          { label:'Driest Stretch',    value: `${dryStreak.max} days`,     color: COLORS.violet,  sub: `ending ${dryStreak.end||'—'}` },
+          { label:'Current 12-Mo',     value: `${fmt(totalActual,2)}"`,    color: COLORS.cyan,    sub: `${fmt(totalDeficit,2)}" short` },
+        ].map(k => (
+          <div key={k.label} className="kpi">
+            <div style={{color:'#94a3b8',fontSize:11,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6}}>{k.label}</div>
+            <div style={{color:k.color,fontSize:28,fontWeight:800,lineHeight:1}}>{k.value}</div>
+            <div style={{color:'#64748b',fontSize:12,marginTop:6}}>{k.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Gauge + month bar side by side */}
+      <div className="grid gap-4" style={{gridTemplateColumns:'280px 1fr'}}>
+        <div className="card">
+          <div className="card-header"><span style={{fontWeight:600}}>Rainfall Gauge</span></div>
+          <div style={{padding:'20px 10px 10px'}}>
+            <PctGauge pct={pctNormal}/>
+            <div style={{textAlign:'center',marginTop:8}}>
+              <span style={{background:droughtLevel.color+'22',color:droughtLevel.color,border:`1px solid ${droughtLevel.color}55`,borderRadius:999,padding:'4px 14px',fontSize:12,fontWeight:600}}>
+                {droughtLevel.label}
+              </span>
+            </div>
+            <div style={{marginTop:16,padding:'0 10px'}}>
+              {[['Normal (100%+)',COLORS.emerald],['Dry (85–99%)',COLORS.cyan],['Moderate D1 (75–84%)',COLORS.amber],['Severe D2 (65–74%)',COLORS.amber],['Extreme D3 (50–64%)','#ef4444'],['Exceptional D4 (<50%)',COLORS.rose]].map(([l,c])=>(
+                <div key={l} style={{display:'flex',alignItems:'center',gap:8,marginBottom:5}}>
+                  <div style={{width:10,height:10,borderRadius:2,background:c,flexShrink:0}}/>
+                  <span style={{fontSize:11,color:'#94a3b8'}}>{l}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header"><span style={{fontWeight:600}}>Monthly Actual vs Normal — Last 12 Months</span></div>
+          <div style={{padding:'12px 8px 0'}}>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={monthCompare} margin={{top:5,right:10,left:0,bottom:20}}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false}/>
+                <XAxis dataKey="label" tick={{fill:'#94a3b8',fontSize:11}} angle={-35} textAnchor="end" interval={0}/>
+                <YAxis tick={{fill:'#94a3b8',fontSize:11}} unit='"'/>
+                <Tooltip content={<CustomTooltip unit='"'/>}/>
+                <Legend wrapperStyle={{color:'#94a3b8',fontSize:12,paddingTop:8}}/>
+                <Bar dataKey="normal" name="Normal" fill="#334155" radius={[3,3,0,0]}/>
+                <Bar dataKey="actual" name="Actual" radius={[3,3,0,0]}>
+                  {monthCompare.map((m,i) => <Cell key={i} fill={m.actual < m.normal * 0.5 ? COLORS.rose : m.actual < m.normal * 0.75 ? COLORS.amber : COLORS.cyan}/>)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* Cumulative deficit area chart */}
+      <div className="card">
+        <div className="card-header"><span style={{fontWeight:600}}>Cumulative Precipitation vs Normal — Last 12 Months</span></div>
+        <div style={{padding:'12px 8px 0'}}>
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={cumulativeDeficit} margin={{top:5,right:20,left:0,bottom:20}}>
+              <defs>
+                <linearGradient id="gradNorm" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={COLORS.cyan} stopOpacity={0.25}/>
+                  <stop offset="95%" stopColor={COLORS.cyan} stopOpacity={0.02}/>
+                </linearGradient>
+                <linearGradient id="gradActual" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={COLORS.amber} stopOpacity={0.35}/>
+                  <stop offset="95%" stopColor={COLORS.amber} stopOpacity={0.02}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false}/>
+              <XAxis dataKey="label" tick={{fill:'#94a3b8',fontSize:11}} angle={-35} textAnchor="end" interval={0}/>
+              <YAxis tick={{fill:'#94a3b8',fontSize:11}} unit='"'/>
+              <Tooltip content={<CustomTooltip unit='"'/>}/>
+              <Legend wrapperStyle={{color:'#94a3b8',fontSize:12,paddingTop:8}}/>
+              <Area type="monotone" dataKey="cumNormal" name="Cumulative Normal" stroke={COLORS.cyan} fill="url(#gradNorm)" strokeWidth={2} dot={false}/>
+              <Area type="monotone" dataKey="cumActual" name="Cumulative Actual" stroke={COLORS.amber} fill="url(#gradActual)" strokeWidth={2.5} dot={false}/>
+            </AreaChart>
+          </ResponsiveContainer>
+          <div style={{textAlign:'center',marginTop:4,color:'#64748b',fontSize:12}}>
+            The gap between the lines is the current deficit — <strong style={{color:COLORS.rose}}>{fmt(totalDeficit,2)}"</strong> as of May 2026.
+          </div>
+        </div>
+      </div>
+
+      {/* Rolling 12-month trend */}
+      <div className="card">
+        <div className="card-header"><span style={{fontWeight:600}}>Rolling 12-Month Precipitation vs Normal (2020–Present)</span></div>
+        <div style={{padding:'12px 8px 0'}}>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={rollingData} margin={{top:5,right:20,left:0,bottom:5}}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false}/>
+              <XAxis dataKey="label" tick={{fill:'#94a3b8',fontSize:10}} interval={5}/>
+              <YAxis tick={{fill:'#94a3b8',fontSize:11}} unit='"'/>
+              <Tooltip content={<CustomTooltip unit='"'/>}/>
+              <Legend wrapperStyle={{color:'#94a3b8',fontSize:12}}/>
+              <ReferenceLine y={normalAnnual} stroke={COLORS.cyan} strokeDasharray="5 3" label={{value:'Normal',fill:COLORS.cyan,fontSize:11}}/>
+              <Line type="monotone" dataKey="normal" name="Normal" stroke={COLORS.cyan} strokeWidth={1.5} strokeDasharray="5 3" dot={false}/>
+              <Line type="monotone" dataKey="actual" name="Rolling 12-Mo Actual" stroke={COLORS.amber} strokeWidth={2.5} dot={false}/>
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Historical context table */}
+      <div className="card">
+        <div className="card-header"><span style={{fontWeight:600}}>Historical Context — 10 Driest 12-Month Periods on Record (1940–2026)</span></div>
+        <div className="overflow-x-auto scroll-thin">
+          <table className="w-full">
+            <thead><tr>
+              <th className="text-left">#</th>
+              <th className="text-left">Period</th>
+              <th className="text-right">Total Precip</th>
+              <th className="text-right">Deficit vs Normal</th>
+              <th className="text-right">% of Normal</th>
+            </tr></thead>
+            <tbody>
+              {worstYears.map((r,i) => {
+                const pct = Math.round((r.actual/normalAnnual)*100);
+                const isRecent = r.label >= '2025';
+                return (
+                  <tr key={i} style={isRecent ? {background:'rgba(244,63,94,.07)'} : {}}>
+                    <td style={{color:'#64748b'}}>{i+1}</td>
+                    <td style={{color: isRecent ? COLORS.rose : '#e2e8f0', fontWeight: isRecent ? 700 : 400}}>
+                      {r.label}{isRecent && <span style={{marginLeft:8,background:COLORS.rose+'22',color:COLORS.rose,border:`1px solid ${COLORS.rose}55`,borderRadius:999,padding:'1px 8px',fontSize:10,fontWeight:600}}>CURRENT</span>}
+                    </td>
+                    <td className="text-right" style={{color:COLORS.amber}}>{fmt(r.actual,2)}"</td>
+                    <td className="text-right" style={{color:COLORS.rose}}>-{fmt(r.deficit,2)}"</td>
+                    <td className="text-right">
+                      <span style={{color: pct<65?COLORS.rose:pct<75?COLORS.amber:COLORS.cyan}}>{pct}%</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
