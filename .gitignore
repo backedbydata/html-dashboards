@@ -1,3 +1,5 @@
 .env
 fetch-noaa.log
 node_modules/
+
+.vercel
