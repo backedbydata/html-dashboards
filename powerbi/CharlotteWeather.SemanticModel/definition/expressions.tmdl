@@ -1,0 +1,6 @@
+/// Folder containing charlotte-weather.json. Defaults to the repo root. The query also probes one and two levels up, so pointing this at the repo root, powerbi\, or powerbi\data all work. If refresh reports the file is missing, set this to the folder holding charlotte-weather.json.
+expression 'Data Folder' = "c:\dev\dashboards" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+	lineageTag: 6cd1fe7f-b268-44c1-9ab6-62c3d36da78e
+
+	annotation PBI_ResultType = Text
+

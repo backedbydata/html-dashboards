@@ -4,3 +4,10 @@ fetch-noaa.log
 notes.md
 Agents.md
 CLAUDE.md
+
+# Power BI project — source for Desktop, not web content. Vercel serves static
+# files and cannot render a PBIP, so there is nothing to gain by uploading it.
+# (Kept in git; excluded only from the deployment.)
+powerbi/
+_brief/
+PLAN-POWERBI.md

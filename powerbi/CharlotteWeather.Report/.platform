@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Report",
+    "displayName": "CharlotteWeather"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "b7e4c1a2-3f5d-4e8b-9a6c-2d1f0e7b4c93"
+  }
+}

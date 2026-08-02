@@ -1,0 +1,4 @@
+relationship Observation_Date
+	fromColumn: Observation.Date
+	toColumn: Date.Date
+

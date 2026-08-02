@@ -1,0 +1,534 @@
+/// Daily weather observations from NOAA station GHCND:USW00013881 (Charlotte Douglas Airport), 1940-01-01 to 2026-05-14. Grain: one row per calendar day. Nulls are preserved, not zero-filled: 1942-1943 have no tmax/tmin/prcp/snow readings.
+table Observation
+	lineageTag: b4a0bc80-ed1b-4b43-9209-f42e55ce797c
+
+	/// Total precipitation in inches for the current filter context. Blank where no readings exist (1942-1943), rather than zero.
+	measure 'Total Precipitation' = SUM('Observation'[Precipitation])
+		formatString: #,##0.00""""
+		displayFolder: Precipitation
+		lineageTag: 72985e13-ded8-45d2-949c-780d92d9a445
+
+	/// Total snowfall in inches for the current filter context.
+	measure 'Total Snowfall' = SUM('Observation'[Snowfall])
+		formatString: #,##0.0""""
+		displayFolder: Precipitation
+		lineageTag: 8ccfde1f-bcd8-49f8-bdd6-bf15973dfad7
+
+	/// Mean daily precipitation across days with a reading.
+	measure 'Average Precipitation Per Day' = AVERAGE('Observation'[Precipitation])
+		formatString: #,##0.000""""
+		displayFolder: Precipitation
+		lineageTag: 52b881df-964d-4972-b056-c704e9d60177
+
+	/// Count of days with measurable snowfall.
+	measure 'Snow Days' = CALCULATE(COUNTROWS('Observation'), 'Observation'[Snowfall] > 0)
+		formatString: #,##0
+		displayFolder: Precipitation
+		lineageTag: 112521d5-0ca6-4b13-ac3f-6ee2d56eb4af
+
+	/// Count of days with at least 0.01 inches of precipitation, the NOAA measurable-precipitation threshold.
+	measure 'Wet Days' = CALCULATE(COUNTROWS('Observation'), 'Observation'[Precipitation] >= 0.01)
+		formatString: #,##0
+		displayFolder: Precipitation
+		lineageTag: 34ecd158-959a-48fc-8828-34f11f013dd8
+
+	/// Mean daily maximum temperature across days with a reading.
+	measure 'Average High Temperature' = AVERAGE('Observation'[High Temperature])
+		formatString: #,##0.0""°F""
+		displayFolder: Temperature
+		lineageTag: 16d65c6a-bd5e-405c-aaba-192937fc11b1
+
+	/// Mean daily minimum temperature across days with a reading.
+	measure 'Average Low Temperature' = AVERAGE('Observation'[Low Temperature])
+		formatString: #,##0.0""°F""
+		displayFolder: Temperature
+		lineageTag: ddf5fa4a-61d6-4ea5-89ad-f187252ca40a
+
+	/// Mean of the daily mean temperature, which uses NOAA tavg where reported and (tmax+tmin)/2 otherwise.
+	measure 'Average Mean Temperature' = AVERAGE('Observation'[Mean Temperature])
+		formatString: #,##0.0""°F""
+		displayFolder: Temperature
+		lineageTag: 077bf447-02c9-4e49-94d0-91e14922dca7
+
+	/// Highest daily maximum temperature in the current filter context.
+	measure 'Record High' = MAX('Observation'[High Temperature])
+		formatString: #,##0""°F""
+		displayFolder: Temperature
+		lineageTag: 54853327-14e4-4457-a902-59606dc64e56
+
+	/// Lowest daily minimum temperature in the current filter context.
+	measure 'Record Low' = MIN('Observation'[Low Temperature])
+		formatString: #,##0""°F""
+		displayFolder: Temperature
+		lineageTag: 5eb49988-f2a1-467d-b11c-29f00774728c
+
+	/// Number of daily records in the current filter context.
+	measure 'Observation Days' = COUNTROWS('Observation')
+		formatString: #,##0
+		displayFolder: Coverage
+		lineageTag: 438ca7e8-18cd-4f35-877c-6c98aca4b4c0
+
+	/// Days with a non-blank precipitation reading. Use to detect the 1942-1943 gap.
+	measure 'Days With Precipitation Reading' = COUNT('Observation'[Precipitation])
+		formatString: #,##0
+		displayFolder: Coverage
+		lineageTag: fcca5abe-3387-4ab0-8747-2a6df5d5016f
+
+	/// The most recent date in the record (2026-05-14). Anchors the drought window and ignores all filters.
+	measure 'Last Observation Date' = CALCULATE(MAX('Observation'[Date]), REMOVEFILTERS())
+		formatString: yyyy-mm-dd
+		displayFolder: Drought\Anchors
+		lineageTag: 9639a176-249d-44f3-b678-5189ea26d07c
+
+	/// The 1991-2020 climatological normal for the month(s) in context: the mean of that calendar month's total precipitation across the 30 baseline years. Ignores every filter except month selection.
+	measure 'Normal Monthly Precipitation' =
+			VAR _MonthNumbers = VALUES('Date'[Month Number])
+			VAR _BaselineByMonthYear =
+			    CALCULATETABLE(
+			        SUMMARIZE('Date', 'Date'[Year], 'Date'[Month Number]),
+			        REMOVEFILTERS(),
+			        'Date'[Is Normals Baseline] = TRUE,
+			        TREATAS(_MonthNumbers, 'Date'[Month Number])
+			    )
+			VAR _MonthlyTotals =
+			    ADDCOLUMNS(_BaselineByMonthYear, "@Total", CALCULATE(SUM('Observation'[Precipitation])))
+			VAR _ByMonth =
+			    GROUPBY(_MonthlyTotals, 'Date'[Month Number], "@MonthNormal", AVERAGEX(CURRENTGROUP(), [@Total]))
+			RETURN
+			    SUMX(_ByMonth, [@MonthNormal])
+		formatString: #,##0.00""""
+		displayFolder: Drought\Normals
+		lineageTag: 21f7e368-3fcb-4030-bb2c-6a2e77e6e0ce
+
+	/// Sum of the twelve 1991-2020 monthly normals: the expected annual precipitation total. Validated at 43.57 inches. Ignores all filters.
+	measure 'Normal Annual Precipitation' =
+			VAR _BaselineByMonthYear =
+			    CALCULATETABLE(
+			        SUMMARIZE('Date', 'Date'[Year], 'Date'[Month Number]),
+			        REMOVEFILTERS(),
+			        'Date'[Is Normals Baseline] = TRUE
+			    )
+			VAR _MonthlyTotals =
+			    ADDCOLUMNS(_BaselineByMonthYear, "@Total", CALCULATE(SUM('Observation'[Precipitation])))
+			VAR _ByMonth =
+			    GROUPBY(_MonthlyTotals, 'Date'[Month Number], "@MonthNormal", AVERAGEX(CURRENTGROUP(), [@Total]))
+			RETURN
+			    SUMX(_ByMonth, [@MonthNormal])
+		formatString: #,##0.00""""
+		displayFolder: Drought\Normals
+		lineageTag: dd2aa5cc-b960-4b98-9807-2c4221306ddb
+
+	/// Actual precipitation over the twelve calendar months ending at the last observation date (2025-06-01 to 2026-05-14). Validated at 28.71 inches. Ignores all filters.
+	measure 'Trailing 12 Month Precipitation' =
+			VAR _AnchorDate = [Last Observation Date]
+			VAR _WindowStart = EOMONTH(_AnchorDate, -12) + 1
+			RETURN
+			    CALCULATE(
+			        SUM('Observation'[Precipitation]),
+			        REMOVEFILTERS(),
+			        'Date'[Date] >= _WindowStart,
+			        'Date'[Date] <= _AnchorDate
+			    )
+		formatString: #,##0.00""""
+		displayFolder: Drought\Current Window
+		lineageTag: a6f89eff-68e1-41d6-9a1f-2419b6ba1a4b
+
+	/// Shortfall in inches between the 1991-2020 annual normal and the trailing 12-month actual. Positive means drier than normal. Expected value about 14.86 inches.
+	measure 'Precipitation Deficit' =
+			VAR _Normal = [Normal Annual Precipitation]
+			VAR _Actual = [Trailing 12 Month Precipitation]
+			RETURN
+			    _Normal - _Actual
+		formatString: #,##0.00""""
+		displayFolder: Drought\Current Window
+		lineageTag: 34d8ccfb-f5c7-4ede-bc71-ad103a119ede
+
+	/// Trailing 12-month precipitation as a share of the 1991-2020 annual normal. Expected value about 66 percent.
+	measure 'Percent Of Normal Precipitation' = DIVIDE([Trailing 12 Month Precipitation], [Normal Annual Precipitation])
+		formatString: 0%
+		displayFolder: Drought\Current Window
+		lineageTag: 5baeb029-d9be-4611-a42b-7dc1ca0d5e8e
+
+	/// NOAA-style drought category derived from percent of normal, using the same thresholds as the HTML dashboard. Supplies the classification the native gauge visual cannot encode as bands.
+	measure 'Drought Classification' =
+			VAR _Pct = [Percent Of Normal Precipitation] * 100
+			RETURN
+			    SWITCH(
+			        TRUE(),
+			        ISBLANK(_Pct), "No Data",
+			        _Pct < 50, "Exceptional Drought (D4)",
+			        _Pct < 65, "Extreme Drought (D3)",
+			        _Pct < 75, "Severe Drought (D2)",
+			        _Pct < 85, "Moderate Drought (D1)",
+			        _Pct < 100, "Abnormally Dry (D0)",
+			        "Near or Above Normal"
+			    )
+		displayFolder: Drought\Current Window
+		lineageTag: 05e1e5a9-c9e6-4fbe-9bbb-79f917687e57
+
+	/// Hex color matching the drought classification band, for conditional formatting on the drought card.
+	measure 'Drought Classification Color' =
+			VAR _Pct = [Percent Of Normal Precipitation] * 100
+			RETURN
+			    SWITCH(
+			        TRUE(),
+			        ISBLANK(_Pct), "#94a3b8",
+			        _Pct < 50, "#f43f5e",
+			        _Pct < 65, "#ef4444",
+			        _Pct < 75, "#f59e0b",
+			        _Pct < 85, "#eab308",
+			        _Pct < 100, "#22d3ee",
+			        "#22d3ee"
+			    )
+		isHidden
+		displayFolder: Drought\Current Window
+		lineageTag: 3eec34d9-f02a-490d-ac4c-8424c4aaaac8
+
+	/// Plain-language drought summary for the alert banner, replacing the HTML banner's inline colored numbers.
+	measure 'Drought Summary' =
+			VAR _Actual = [Trailing 12 Month Precipitation]
+			VAR _Normal = [Normal Annual Precipitation]
+			VAR _Deficit = [Precipitation Deficit]
+			VAR _PctBelow = DIVIDE(_Deficit, _Normal) * 100
+			VAR _AnchorDate = [Last Observation Date]
+			RETURN
+			    "The 12 months ending " & FORMAT(_AnchorDate, "mmmm d, yyyy")
+			    & " received " & FORMAT(_Actual, "0.00") & " inches against a 1991-2020 normal of "
+			    & FORMAT(_Normal, "0.00") & " inches - a deficit of " & FORMAT(_Deficit, "0.00")
+			    & " inches, or " & FORMAT(_PctBelow, "0") & "% below normal. Current classification: "
+			    & [Drought Classification] & "."
+		displayFolder: Drought\Current Window
+		lineageTag: c80ff694-d445-4514-83a8-0a03f0e14b33
+
+	/// Mean temperature across the fixed 1940-1980 reference period. Constant regardless of filter selection - the anomaly baseline.
+	measure 'Baseline Mean Temperature 1940 To 1980' =
+			CALCULATE(
+			    AVERAGE('Observation'[Mean Temperature]),
+			    REMOVEFILTERS(),
+			    'Date'[Is Anomaly Baseline] = TRUE
+			)
+		formatString: #,##0.00""°F""
+		displayFolder: Anomaly
+		lineageTag: 638601a1-0587-449f-9f26-40051bf8e5cf
+
+	/// Departure in degrees Fahrenheit of the current context's mean temperature from the 1940-1980 baseline. Positive means warmer than baseline.
+	measure 'Temperature Anomaly' =
+			VAR _Baseline = [Baseline Mean Temperature 1940 To 1980]
+			VAR _Current = AVERAGE('Observation'[Mean Temperature])
+			RETURN
+			    IF(NOT ISBLANK(_Current), _Current - _Baseline)
+		formatString: +#,##0.00;-#,##0.00;0.00
+		displayFolder: Anomaly
+		lineageTag: a9d9ca6b-84f1-4f76-9cec-ed94f9636abe
+
+	/// Precipitation summed over the 12 months ending at the last date in the current context. Follows the filter context, unlike the drought measures. Use on a monthly axis.
+	measure 'Rolling 12 Month Precipitation' =
+			VAR _LastDate = MAX('Date'[Date])
+			RETURN
+			    CALCULATE(
+			        SUM('Observation'[Precipitation]),
+			        DATESINPERIOD('Date'[Date], _LastDate, -12, MONTH)
+			    )
+		formatString: #,##0.00""""
+		displayFolder: Precipitation\Rolling
+		lineageTag: 467f1e48-d4c0-4c41-beb3-9df43d138547
+
+	/// Gap between the rolling 12-month total and the 1991-2020 annual normal. Negative means below normal.
+	measure 'Rolling 12 Month Precipitation Versus Normal' =
+			VAR _Rolling = [Rolling 12 Month Precipitation]
+			VAR _Normal = [Normal Annual Precipitation]
+			RETURN
+			    IF(NOT ISBLANK(_Rolling), _Rolling - _Normal)
+		formatString: +#,##0.00;-#,##0.00;0.00
+		displayFolder: Precipitation\Rolling
+		lineageTag: 44baec97-fdc8-424f-a615-0bbc6165c7ff
+
+	/// Length in days of the longest run of consecutive days below the 0.01 inch measurable-precipitation threshold, within the current filter context. Uses the date-minus-rank grouping technique because DAX has no ordered-window primitive. Days with no reading are explicitly excluded: in DAX a BLANK comparison passes < 0.01, which would otherwise report the unmeasured 1942-1943 gap as a 730-day drought.
+	measure 'Longest Dry Streak' =
+			VAR _DryDays =
+			    FILTER(
+			        CALCULATETABLE(
+			            SUMMARIZE('Observation', 'Observation'[Date], 'Observation'[Precipitation])
+			        ),
+			        NOT ISBLANK('Observation'[Precipitation]) && 'Observation'[Precipitation] < 0.01
+			    )
+			VAR _Ranked =
+			    ADDCOLUMNS(
+			        _DryDays,
+			        "@Grp", INT('Observation'[Date]) - RANKX(_DryDays, INT('Observation'[Date]), , ASC, DENSE)
+			    )
+			VAR _Streaks =
+			    GROUPBY(_Ranked, [@Grp], "@Len", COUNTX(CURRENTGROUP(), 1))
+			RETURN
+			    MAXX(_Streaks, [@Len])
+		formatString: #,##0
+		displayFolder: Drought\Dry Streak
+		lineageTag: 8553de31-bee1-4c72-9568-ec8873f1f1f8
+
+	/// Number of consecutive dry days ending at the last observation date, counting only days with an actual reading. Ignores all filters.
+	measure 'Current Dry Streak' =
+			VAR _AnchorDate = [Last Observation Date]
+			VAR _AllDays =
+			    CALCULATETABLE(
+			        SUMMARIZE('Observation', 'Observation'[Date], 'Observation'[Precipitation]),
+			        REMOVEFILTERS(),
+			        'Date'[Date] <= _AnchorDate
+			    )
+			VAR _WithReadings = FILTER(_AllDays, NOT ISBLANK('Observation'[Precipitation]))
+			VAR _LastWetDate =
+			    MAXX(FILTER(_WithReadings, 'Observation'[Precipitation] >= 0.01), 'Observation'[Date])
+			RETURN
+			    COUNTROWS(FILTER(_WithReadings, 'Observation'[Date] > _LastWetDate))
+		formatString: #,##0
+		displayFolder: Drought\Dry Streak
+		lineageTag: e14b5110-ad83-4395-96ad-e3e4888e9c4d
+
+	/// Rolling 12-month precipitation as a percentage of the 1991-2020 annual normal, plotted over time. Returns blank for partial windows so the series does not dip artificially at the start of the record. This is the series behind the banded D0-D4 drought chart.
+	measure 'Rolling 12 Month Percent Of Normal' =
+			VAR _Rolling = [Rolling 12 Month Precipitation]
+			VAR _Normal = [Normal Annual Precipitation]
+			VAR _MonthsCovered =
+			    CALCULATE(
+			        DISTINCTCOUNT('Date'[Year Month]),
+			        DATESINPERIOD('Date'[Date], MAX('Date'[Date]), -12, MONTH)
+			    )
+			RETURN
+			    IF(_MonthsCovered = 12, DIVIDE(_Rolling, _Normal))
+		formatString: 0%
+		displayFolder: Drought\Banded Trend
+		lineageTag: 2a7ea996-485c-425f-ae0c-356b31371618
+
+	/// Count of days at or above the 1.4 inch heavy-precipitation threshold (95th percentile of wet days).
+	measure 'Heavy Precipitation Days' = CALCULATE(COUNTROWS('Observation'), 'Observation'[Precipitation Day Class] = "Heavy")
+		formatString: #,##0
+		displayFolder: Precipitation
+		lineageTag: 5d04f771-649c-4737-a925-bf185b759b4f
+
+	/// Share of measured days that reached the heavy-precipitation threshold. Comparable across periods with different record coverage.
+	measure 'Heavy Precipitation Day Rate' = DIVIDE([Heavy Precipitation Days], [Days With Precipitation Reading])
+		formatString: 0.0%
+		displayFolder: Precipitation
+		lineageTag: 438c0070-9618-4f32-a3ec-ee34c6f2d684
+
+	/// Rank of the current trailing 12-month total against every complete 12-month window on record, driest first. Reads the precomputed Rolling Window table rather than iterating at query time.
+	measure 'Driest 12 Month Period Rank' =
+			VAR _Current = [Trailing 12 Month Precipitation]
+			VAR _Complete = CALCULATETABLE('Rolling Window', REMOVEFILTERS())
+			RETURN
+			    IF(
+			        NOT ISBLANK(_Current),
+			        COUNTROWS(FILTER(_Complete, 'Rolling Window'[Window Precipitation] < _Current)) + 1
+			    )
+		formatString: #,##0
+		displayFolder: Drought\Historical Context
+		lineageTag: 1bc45daa-c5bb-4d91-9122-556108940e81
+
+	/// Human-readable period of record for the source-note card. Ignores all filters.
+	measure 'Record Span' =
+			VAR _Min = CALCULATE(MIN('Observation'[Date]), REMOVEFILTERS())
+			VAR _Max = CALCULATE(MAX('Observation'[Date]), REMOVEFILTERS())
+			RETURN
+			    FORMAT(_Min, "mmmm d, yyyy") & " to " & FORMAT(_Max, "mmmm d, yyyy")
+		displayFolder: Coverage
+		lineageTag: 84fd955a-563b-40d9-a586-d52d192ee231
+
+	/// Number of 12-month windows with complete daily coverage. Denominator for the drought ranking.
+	measure 'Complete Window Count' = CALCULATE(COUNTROWS('Rolling Window'), REMOVEFILTERS())
+		formatString: #,##0
+		displayFolder: Drought\Historical Context
+		lineageTag: 05d6dd43-a488-43eb-8c13-043d44ab6d26
+
+	/// Sentence placing the current 12-month window in historical context for the drought page.
+	measure 'Drought Rank Statement' =
+			VAR _Rank = [Driest 12 Month Period Rank]
+			VAR _Total = [Complete Window Count]
+			VAR _Pctile = DIVIDE(_Rank, _Total)
+			RETURN
+			    IF(
+			        NOT ISBLANK(_Rank),
+			        "Ranks " & FORMAT(_Rank, "#,##0") & " driest of " & FORMAT(_Total, "#,##0")
+			        & " complete twelve-month windows since 1940 — drier than " & FORMAT(1 - _Pctile, "0%") & " of the record."
+			    )
+		displayFolder: Drought\Historical Context
+		lineageTag: cff1a0b8-f9e5-4abd-83fd-48fdbc7f3e17
+
+	/// Precipitation for each calendar month within the trailing 12-month drought window only. Comparable like-for-like against Normal Monthly Precipitation, unlike Total Precipitation which sums all 86 years of that month.
+	measure 'Recent Month Precipitation' =
+			VAR _Anchor = [Last Observation Date]
+			VAR _WindowStart = EOMONTH(_Anchor, -12) + 1
+			VAR _Months = VALUES('Date'[Month Number])
+			RETURN
+			    CALCULATE(
+			        SUM('Observation'[Precipitation]),
+			        REMOVEFILTERS(),
+			        'Date'[Date] >= _WindowStart,
+			        'Date'[Date] <= _Anchor,
+			        TREATAS(_Months, 'Date'[Month Number])
+			    )
+		formatString: #,##0.00""""
+		displayFolder: Drought\Current Window
+		lineageTag: 1fa5f7c7-4531-4999-ae2a-7c3eae1324a3
+
+	/// Observation date. Foreign key to the Date table.
+	column Date
+		dataType: dateTime
+		isHidden
+		formatString: Long Date
+		isAvailableInMdx: false
+		lineageTag: 68ddbfc0-028b-4d67-a139-29dcf1df08a8
+		summarizeBy: none
+		sourceColumn: date
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	/// Daily maximum temperature in degrees Fahrenheit. Null for 1942-1943.
+	column 'High Temperature'
+		dataType: int64
+		isHidden
+		lineageTag: 00b4440b-621e-44cc-a828-1e88f108ed2f
+		summarizeBy: none
+		sourceColumn: tmax
+
+	/// Daily minimum temperature in degrees Fahrenheit. Null for 1942-1943.
+	column 'Low Temperature'
+		dataType: int64
+		isHidden
+		lineageTag: 6cba3328-f993-4e90-84f0-5c897d8552f6
+		summarizeBy: none
+		sourceColumn: tmin
+
+	/// NOAA-reported daily mean. Present on only 10.5% of rows (1942-1943 and 1998-2005).
+	column 'Reported Mean Temperature'
+		dataType: int64
+		isHidden
+		isAvailableInMdx: false
+		lineageTag: 5bb3655c-0c7b-4873-a69b-a31c42748221
+		summarizeBy: none
+		sourceColumn: tavg
+
+	/// Daily mean temperature: the NOAA-reported tavg where present, otherwise (tmax+tmin)/2. Null only where neither source is available.
+	column 'Mean Temperature'
+		dataType: double
+		isHidden
+		lineageTag: 4a95e963-1abc-45bd-b67d-212a68f223cd
+		summarizeBy: sum
+		sourceColumn: meantemp
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	/// Daily precipitation in inches. Null for 1942-1943 - not zero.
+	column Precipitation
+		dataType: double
+		isHidden
+		lineageTag: a3ceafb7-3989-4674-b889-77ddf51a8389
+		summarizeBy: sum
+		sourceColumn: prcp
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	/// Daily snowfall in inches.
+	column Snowfall
+		dataType: double
+		isHidden
+		lineageTag: 3e2b8174-93a7-4dda-af6a-fccc645e02f2
+		summarizeBy: sum
+		sourceColumn: snow
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	/// Snow depth on the ground in inches.
+	column 'Snow Depth'
+		dataType: double
+		isHidden
+		lineageTag: 4e65e8d9-a087-4c3f-ae21-30935df0f313
+		summarizeBy: sum
+		sourceColumn: snwd
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	/// Rain Only, Snow Only, Mixed, Dry, or No Reading. Slicer field.
+	column 'Precipitation Type'
+		dataType: string
+		lineageTag: 8c72d6a8-c9d3-47d8-b489-1a602380c06f
+		summarizeBy: none
+		sourceColumn: preciptype
+
+	/// None, Light (<0.25 in), Moderate (0.25-1 in), Heavy (>=1 in), or No Reading. Slicer field.
+	column 'Precipitation Band'
+		dataType: string
+		lineageTag: f2831825-71f2-45eb-9c5d-511edbd0d769
+		summarizeBy: none
+		sourceColumn: precipband
+
+	/// Classifies each day as Heavy (at or above 1.4 inches, the 95th percentile of wet days), Normal Wet, Dry, or No Reading. Target field for the Key Influencers visual.
+	column 'Precipitation Day Class' =
+			VAR _P = 'Observation'[Precipitation]
+			RETURN
+			    SWITCH(
+			        TRUE(),
+			        ISBLANK(_P), "No Reading",
+			        _P < 0.01, "Dry",
+			        _P < 1.4, "Normal Wet",
+			        "Heavy"
+			    )
+		dataType: string
+		lineageTag: f2eb12a6-c67f-4a05-b657-d78f9e6e6bcb
+		summarizeBy: none
+
+	/// 1 when daily precipitation reaches the 1.4 inch heavy threshold, 0 when a reading exists below it, blank when unmeasured. Numeric form for rate measures.
+	column 'Is Heavy Precipitation Day' =
+			VAR _P = 'Observation'[Precipitation]
+			RETURN
+			    IF(ISBLANK(_P), BLANK(), IF(_P >= 1.4, 1, 0))
+		dataType: int64
+		isHidden
+		lineageTag: 684d113f-7bba-4818-a1f8-9bab26a3e1a4
+		summarizeBy: none
+
+	/// Buckets the daily high into readable temperature bands. Used as an explanatory factor in Key Influencers and as a decomposition-tree level.
+	column 'Temperature Band' =
+			VAR _T = 'Observation'[High Temperature]
+			RETURN
+			    SWITCH(
+			        TRUE(),
+			        ISBLANK(_T), "No Reading",
+			        _T < 32, "Freezing (below 32F)",
+			        _T < 50, "Cold (32-49F)",
+			        _T < 70, "Mild (50-69F)",
+			        _T < 85, "Warm (70-84F)",
+			        _T < 95, "Hot (85-94F)",
+			        "Extreme Heat (95F+)"
+			    )
+		dataType: string
+		lineageTag: 61b8e2f0-ab00-4bc4-a0ce-416b900a47c5
+		summarizeBy: none
+
+	partition Observation = m
+		mode: import
+		source =
+				let
+				    Exists = (folder as text) as logical =>
+				        try List.Contains(Table.Column(Folder.Files(folder), "Name"), "charlotte-weather.json")
+				        otherwise false,
+				    Candidates = List.Select({ #"Data Folder", #"Data Folder" & "\..", #"Data Folder" & "\..\.." }, each Exists(_)),
+				    DataFolder = if List.Count(Candidates) > 0 then List.First(Candidates)
+				                 else error "charlotte-weather.json not found. Set the 'Data Folder' parameter (Transform data > Manage parameters) to the folder holding charlotte-weather.json.",
+				    Source = Json.Document(File.Contents(DataFolder & "\charlotte-weather.json")),
+				    ToTable = Table.FromList(Source, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
+				    Expanded = Table.ExpandRecordColumn(ToTable, "Column1", {"date", "tmax", "tmin", "tavg", "prcp", "snow", "snwd"}, {"date", "tmax", "tmin", "tavg", "prcp", "snow", "snwd"}),
+				    Typed = Table.TransformColumnTypes(Expanded, {{"date", type date}, {"tmax", Int64.Type}, {"tmin", Int64.Type}, {"tavg", Int64.Type}, {"prcp", type number}, {"snow", type number}, {"snwd", type number}}),
+				    AddMeanTemp = Table.AddColumn(Typed, "meantemp", each if [tavg] <> null then Number.From([tavg]) else if [tmax] <> null and [tmin] <> null then ([tmax] + [tmin]) / 2 else null, type number),
+				    AddPrecipType = Table.AddColumn(AddMeanTemp, "preciptype", each if [prcp] = null and [snow] = null then "No Reading" else if ([snow] ?? 0) > 0 and ([prcp] ?? 0) > 0 then "Mixed" else if ([snow] ?? 0) > 0 then "Snow Only" else if ([prcp] ?? 0) > 0 then "Rain Only" else "Dry", type text),
+				    AddPrecipBand = Table.AddColumn(AddPrecipType, "precipband", each if [prcp] = null then "No Reading" else if [prcp] = 0 then "None" else if [prcp] < 0.25 then "Light" else if [prcp] < 1 then "Moderate" else "Heavy", type text),
+				    Final = Table.SelectColumns(AddPrecipBand, {"date", "tmax", "tmin", "tavg", "meantemp", "prcp", "snow", "snwd", "preciptype", "precipband"})
+				in
+				    Final
+

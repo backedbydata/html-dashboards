@@ -3,3 +3,9 @@ fetch-noaa.log
 node_modules/
 
 .vercel
+
+# Power BI Desktop local state — per-machine, not source.
+# The whole .pbi folder is Desktop scratch: a 546 KB data cache, window
+# positions, and editor prefs. None of it belongs in version control.
+**/.pbi/
+**/*.pbix

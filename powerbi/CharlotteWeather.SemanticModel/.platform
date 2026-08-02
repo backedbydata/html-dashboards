@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "SemanticModel",
+    "displayName": "CharlotteWeather"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "4a9d2e6f-8c31-4b7a-95e2-6f8a3c1d0b57"
+  }
+}

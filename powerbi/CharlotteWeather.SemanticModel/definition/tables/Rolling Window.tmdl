@@ -1,0 +1,84 @@
+/// One row per 12-calendar-month window ending at each month in the record, precomputed at refresh. Only windows with complete daily precipitation coverage are retained, so the 1942-1943 gap and the 2026 tail do not masquerade as dry periods. Backs the driest-periods ranking and the banded drought trend.
+table 'Rolling Window'
+	lineageTag: 1bae7825-3d59-43c7-b590-c8b3e9acbee8
+
+	/// Precipitation total for the selected 12-month window.
+	measure 'Window Total Precipitation' = SUM('Rolling Window'[Window Precipitation])
+		formatString: #,##0.00""""
+		displayFolder: Rolling Window
+		lineageTag: 90357f33-062a-4505-b9da-d4ad3762c12d
+
+	/// The selected 12-month window's total as a share of the 1991-2020 annual normal. This is the series plotted against the shaded D0-D4 drought bands.
+	measure 'Window Percent Of Normal' = DIVIDE(SUM('Rolling Window'[Window Precipitation]), [Normal Annual Precipitation])
+		formatString: 0%
+		displayFolder: Rolling Window
+		lineageTag: a1773ab7-035d-4e80-b73f-5795b94d284f
+
+	column 'Window End Month'
+		lineageTag: eb194282-6bed-4f42-b864-4cb1d3a61a5e
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Window End Month]
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Window End Date'
+		lineageTag: d735a221-978d-4de1-a666-c25b4a2bbcdc
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Window End Date]
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Window Start Date'
+		lineageTag: a72a160e-c07a-4472-818a-48d267eb3d9e
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [Window Start Date]
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Window Precipitation'
+		lineageTag: 059f9361-bf7e-47dc-bffe-d2dc103eafb5
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: [Window Precipitation]
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Window Rank'
+		lineageTag: 313ba024-14e4-4f98-9ea7-232dd8a08926
+		summarizeBy: sum
+		isNameInferred
+		sourceColumn: [Window Rank]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'Rolling Window' = calculated
+		mode: import
+		source =
+				VAR _Ends =
+				    ADDCOLUMNS(
+				        SUMMARIZE('Date', 'Date'[Year Month]),
+				        "@End", CALCULATE(MAX('Date'[Date]), ALLEXCEPT('Date', 'Date'[Year Month]))
+				    )
+				VAR _Spans =
+				    ADDCOLUMNS(_Ends, "@Start", EOMONTH([@End], -12) + 1)
+				VAR _Measured =
+				    ADDCOLUMNS(
+				        _Spans,
+				        "@CalendarDays", COUNTROWS(FILTER(ALL('Date'), 'Date'[Date] >= [@Start] && 'Date'[Date] <= [@End])),
+				        "@Readings", COUNTX(FILTER(ALL('Observation'), 'Observation'[Date] >= [@Start] && 'Observation'[Date] <= [@End]), 'Observation'[Precipitation]),
+				        "@Total", SUMX(FILTER(ALL('Observation'), 'Observation'[Date] >= [@Start] && 'Observation'[Date] <= [@End]), 'Observation'[Precipitation])
+				    )
+				VAR _Complete = FILTER(_Measured, [@Readings] = [@CalendarDays] && [@CalendarDays] >= 365)
+				RETURN
+				    SELECTCOLUMNS(
+				        _Complete,
+				        "Window End Month", 'Date'[Year Month],
+				        "Window End Date", [@End],
+				        "Window Start Date", [@Start],
+				        "Window Precipitation", [@Total],
+				        "Window Rank", RANKX(_Complete, [@Total], , ASC, DENSE)
+				    )
+

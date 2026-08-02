@@ -1,0 +1,179 @@
+/// Contiguous daily calendar from 1940-01-01 to 2026-12-31, covering the full observation record. Marked as the model's date table.
+table Date
+	lineageTag: 193b9dbd-7291-4c99-a42e-4aa909aa240d
+	dataCategory: Time
+
+	/// Calendar date. Primary key of the date dimension.
+	column Date
+		dataType: dateTime
+		isUnique
+		isKey
+		formatString: yyyy-mm-dd
+		lineageTag: 49e9ca29-7a3c-4553-95e0-ee62834594a5
+		summarizeBy: none
+		sourceColumn: date
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	/// Four-digit calendar year. Note 2026 is partial: the record ends 2026-05-14.
+	column Year
+		dataType: int64
+		formatString: 0
+		lineageTag: 3746c07c-626f-4fe2-98c5-7ec48af44d5e
+		summarizeBy: none
+		sourceColumn: year
+
+	/// 1-12. Sort column for Month and Month Short.
+	column 'Month Number'
+		dataType: int64
+		isHidden
+		lineageTag: 1ed41d83-f41e-4aa5-8f6d-e97a062aad6a
+		summarizeBy: none
+		sourceColumn: monthnumber
+
+	/// Full month name, sorted chronologically.
+	column Month
+		dataType: string
+		lineageTag: 558e3bc1-c3fe-4bac-97d2-20af9f3c8bb0
+		summarizeBy: none
+		sourceColumn: monthname
+		sortByColumn: 'Month Number'
+
+	/// Three-letter month abbreviation, for dense axis labels.
+	column 'Month Short'
+		dataType: string
+		lineageTag: f4c119e0-c145-432c-a907-7cad5acdd7ef
+		summarizeBy: none
+		sourceColumn: monthshort
+		sortByColumn: 'Month Number'
+
+	/// Q1-Q4.
+	column Quarter
+		dataType: string
+		lineageTag: b6b277ac-a5ec-402e-b004-7c5d63c73b37
+		summarizeBy: none
+		sourceColumn: quarter
+
+	/// First year of the decade. Sort column for Decade.
+	column 'Decade Start'
+		dataType: int64
+		isHidden
+		lineageTag: e6e9a511-51b1-4704-8834-85588dc9f147
+		summarizeBy: none
+		sourceColumn: decadestart
+
+	/// Decade label such as 1990s. Note the 1940s and 2020s are partial decades.
+	column Decade
+		dataType: string
+		lineageTag: 4ea7fa16-c172-44c4-a38b-da28fbec3032
+		summarizeBy: none
+		sourceColumn: decade
+		sortByColumn: 'Decade Start'
+
+	/// Spring=1 through Winter=4. Sort column for Season.
+	column 'Season Order'
+		dataType: int64
+		isHidden
+		lineageTag: ba18a54e-0853-4568-a7ef-2f82b9b294a4
+		summarizeBy: none
+		sourceColumn: seasonorder
+
+	/// Meteorological season: Spring (Mar-May), Summer (Jun-Aug), Fall (Sep-Nov), Winter (Dec-Feb).
+	column Season
+		dataType: string
+		lineageTag: 56eb24eb-da31-41a7-9a98-67c37ff2a768
+		summarizeBy: none
+		sourceColumn: season
+		sortByColumn: 'Season Order'
+
+	/// Monday=1 through Sunday=7. Sort column for Day Name.
+	column 'Day Of Week Number'
+		dataType: int64
+		isHidden
+		lineageTag: 874b7f3b-4f0b-4093-87f8-ea3f21207580
+		summarizeBy: none
+		sourceColumn: dayofweeknumber
+
+	/// Full weekday name.
+	column 'Day Name'
+		dataType: string
+		lineageTag: 9e1600c6-b9a4-4a9f-856f-19afadb85536
+		summarizeBy: none
+		sourceColumn: dayname
+		sortByColumn: 'Day Of Week Number'
+
+	/// Weekday or Weekend.
+	column 'Day Type'
+		dataType: string
+		lineageTag: e12cb43e-658f-44b4-a66b-1456aecfbeb4
+		summarizeBy: none
+		sourceColumn: daytype
+
+	/// Pre-1980, Post-1980, or Last 30 Years. Mutually exclusive, unlike the HTML original where Post-1980 and Last 30 Years overlap.
+	column 'Climatological Period'
+		dataType: string
+		lineageTag: 87d20dbb-4532-44c3-a2f7-b624b37fbdb1
+		summarizeBy: none
+		sourceColumn: climateperiod
+
+	/// 1-366.
+	column 'Day Of Year'
+		dataType: int64
+		isHidden
+		lineageTag: 13926795-4e17-4d2f-961a-e7b642418334
+		summarizeBy: none
+		sourceColumn: dayofyear
+
+	/// yyyy-MM label for monthly time series axes.
+	column 'Year Month'
+		dataType: string
+		lineageTag: dd4284ae-89b9-41ab-a6d5-f7e41196ff8a
+		summarizeBy: none
+		sourceColumn: yearmonth
+
+	/// True for 1991-2020, the WMO climatological normals window.
+	column 'Is Normals Baseline'
+		dataType: boolean
+		isHidden
+		lineageTag: 33a7da5f-a2e3-4260-b16f-71d9080dc601
+		summarizeBy: none
+		sourceColumn: isnormalsbaseline
+
+	/// True for 1940-1980, the anomaly comparison baseline.
+	column 'Is Anomaly Baseline'
+		dataType: boolean
+		isHidden
+		lineageTag: 4b7e9f11-c1ff-4a84-ae1c-ec6108852adf
+		summarizeBy: none
+		sourceColumn: isanomalybaseline
+
+	partition Date = m
+		mode: import
+		source =
+				let
+				    StartDate = #date(1940, 1, 1),
+				    EndDate = #date(2026, 12, 31),
+				    DayCount = Duration.Days(EndDate - StartDate) + 1,
+				    Dates = List.Dates(StartDate, DayCount, #duration(1, 0, 0, 0)),
+				    ToTable = Table.FromList(Dates, Splitter.SplitByNothing(), {"date"}, null, ExtraValues.Error),
+				    Typed = Table.TransformColumnTypes(ToTable, {{"date", type date}}),
+				    AddYear = Table.AddColumn(Typed, "year", each Date.Year([date]), Int64.Type),
+				    AddMonthNum = Table.AddColumn(AddYear, "monthnumber", each Date.Month([date]), Int64.Type),
+				    AddMonthName = Table.AddColumn(AddMonthNum, "monthname", each Date.ToText([date], "MMMM", "en-US"), type text),
+				    AddMonthShort = Table.AddColumn(AddMonthName, "monthshort", each Date.ToText([date], "MMM", "en-US"), type text),
+				    AddQuarter = Table.AddColumn(AddMonthShort, "quarter", each "Q" & Text.From(Date.QuarterOfYear([date])), type text),
+				    AddDecadeStart = Table.AddColumn(AddQuarter, "decadestart", each Number.IntegerDivide(Date.Year([date]), 10) * 10, Int64.Type),
+				    AddDecade = Table.AddColumn(AddDecadeStart, "decade", each Text.From(Number.IntegerDivide(Date.Year([date]), 10) * 10) & "s", type text),
+				    AddSeasonOrder = Table.AddColumn(AddDecade, "seasonorder", each let m = Date.Month([date]) in if m >= 3 and m <= 5 then 1 else if m >= 6 and m <= 8 then 2 else if m >= 9 and m <= 11 then 3 else 4, Int64.Type),
+				    AddSeason = Table.AddColumn(AddSeasonOrder, "season", each let m = Date.Month([date]) in if m >= 3 and m <= 5 then "Spring" else if m >= 6 and m <= 8 then "Summer" else if m >= 9 and m <= 11 then "Fall" else "Winter", type text),
+				    AddDayOfWeekNum = Table.AddColumn(AddSeason, "dayofweeknumber", each Date.DayOfWeek([date], Day.Monday) + 1, Int64.Type),
+				    AddDayName = Table.AddColumn(AddDayOfWeekNum, "dayname", each Date.ToText([date], "dddd", "en-US"), type text),
+				    AddDayType = Table.AddColumn(AddDayName, "daytype", each if Date.DayOfWeek([date], Day.Monday) >= 5 then "Weekend" else "Weekday", type text),
+				    AddClimatePeriod = Table.AddColumn(AddDayType, "climateperiod", each let y = Date.Year([date]) in if y >= 1997 then "Last 30 Years" else if y >= 1980 then "Post-1980" else "Pre-1980", type text),
+				    AddDayOfYear = Table.AddColumn(AddClimatePeriod, "dayofyear", each Date.DayOfYear([date]), Int64.Type),
+				    AddYearMonth = Table.AddColumn(AddDayOfYear, "yearmonth", each Date.ToText([date], "yyyy-MM", "en-US"), type text),
+				    AddIsNormalsBase = Table.AddColumn(AddYearMonth, "isnormalsbaseline", each Date.Year([date]) >= 1991 and Date.Year([date]) <= 2020, type logical),
+				    AddIsAnomalyBase = Table.AddColumn(AddIsNormalsBase, "isanomalybaseline", each Date.Year([date]) >= 1940 and Date.Year([date]) <= 1980, type logical)
+				in
+				    AddIsAnomalyBase
+
