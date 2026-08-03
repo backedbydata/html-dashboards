@@ -4,8 +4,7 @@
   "description": "Three builds of the same dashboard, from the same data, by three different routes.",
   "main": "fetch-noaa.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "vite build"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
@@ -18,9 +17,5 @@
   "bugs": {
     "url": "https://github.com/backedbydata/html-dashboards/issues"
   },
-  "homepage": "https://github.com/backedbydata/html-dashboards#readme",
-  "dependencies": {
-    "@vercel/analytics": "^2.0.1",
-    "vite": "^8.2.0"
-  }
+  "homepage": "https://github.com/backedbydata/html-dashboards#readme"
 }
